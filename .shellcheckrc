@@ -1,0 +1,10 @@
+# .shellcheckrc - Shellcheck configuration for statusline.sh
+
+# Specify shell dialect
+shell=bash
+
+# Set minimum severity level
+severity=style
+
+# Enable all checks
+enable=all

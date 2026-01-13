@@ -1,0 +1,21 @@
+{
+  "model": {
+    "display_name": "Test Model"
+  },
+  "workspace": {
+    "current_dir": "/tmp/statusline-test"
+  },
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {
+      "input_tokens": 5000,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  },
+  "cost": {
+    "total_cost_usd": 0,
+    "total_lines_added": 0,
+    "total_lines_removed": 0
+  }
+}
