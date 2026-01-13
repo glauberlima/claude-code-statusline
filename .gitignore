@@ -1,0 +1,27 @@
+# IDE and Development Tools
+.serena/
+.vscode/
+.idea/
+*.sublime-*
+
+# Editor Backup Files
+*~
+*.swp
+*.swo
+*.bak
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Temporary and Runtime Files
+*.log
+*.tmp
+tmp/
+temp/
+*.pid
+
+# Claude Code Local Configuration
+.claude/settings.local.json
