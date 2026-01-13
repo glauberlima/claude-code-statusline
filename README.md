@@ -29,7 +29,7 @@ A sophisticated, cross-platform statusline for Claude Code that displays real-ti
 - **macOS**: Full emoji support
 - **Linux**: Full emoji support
 - **WSL**: Full emoji support with Windows integration
-- **MinGW/MSYS/Cygwin**: ASCII fallback characters
+- **MinGW/MSYS/Cygwin**: Emoji support (requires modern terminal)
 
 ### Performance Optimizations
 - ⚡ **Optimized Git Operations**: Reduced from 7 git calls to 2 using porcelain v2 format (~71% reduction)
@@ -39,7 +39,7 @@ A sophisticated, cross-platform statusline for Claude Code that displays real-ti
 
 ## Prerequisites
 
-- **Bash** 4.0 or higher
+- **Bash** 3.2 or higher
 - **jq** 1.5 or higher (JSON processor)
 - **git** 2.11 or higher (required for porcelain v2 format)
 
@@ -141,11 +141,6 @@ Configure Claude Code to use the custom statusline by editing your settings file
 ### Not a Git Repository
 ```
 📂 tmp | 🚀 Sonnet | 🔥 [████████████░░░] 80% | 🎋 (not a git repository)
-```
-
-### MinGW/MSYS (ASCII Mode)
-```
-@ project | > Opus | [ ████████░░░░░░░ ] 53% | * (main)
 ```
 
 ## Architecture

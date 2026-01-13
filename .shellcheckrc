@@ -1,10 +1,14 @@
-# .shellcheckrc - Shellcheck configuration for statusline.sh
-
-# Specify shell dialect
-shell=bash
-
-# Set minimum severity level
-severity=style
-
-# Enable all checks
+# Enable all optional checks available in ShellCheck
+# This includes style, portability, and advanced logic checks.
 enable=all
+
+# Allow ShellCheck to open and check any 'source'd files
+# This prevents SC1091 (Not following: file was not specified as input).
+external-sources=true
+
+# Add the script's own directory to the search path for sourced files
+source-path=SCRIPTDIR
+
+# Enable extended dataflow analysis for more accurate bug detection
+# (Enabled by default in recent versions, but explicit here for strictness)
+extended-analysis=true

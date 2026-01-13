@@ -26,7 +26,7 @@ run_test() {
 
   local output
   local exit_code=0
-  output=$(echo "${json_input}" | "$SCRIPT_DIR/statusline.sh" 2>&1) || exit_code=$?
+  output=$(echo "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
 
   if [[ ${exit_code} -eq 0 ]]; then
     echo -e "${GREEN}✓${NC} ${test_name}"

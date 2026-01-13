@@ -8,13 +8,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Create a temporary file with statusline functions (remove last line which calls main)
 TEMP_FILE=$(mktemp)
-sed '$d' "$SCRIPT_DIR/statusline.sh" > "$TEMP_FILE"
-# shellcheck source=/dev/null
-source "$TEMP_FILE"
-rm -f "$TEMP_FILE"
+sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
+# shellcheck source=/dev/null  # Dynamic temp file - runtime-generated content
+source "${TEMP_FILE}"
+rm -f "${TEMP_FILE}"
 
 # Colors are already defined in statusline.sh as readonly
-# RED, GREEN, NC are available
+# RED, GREEN, NC are available from sourced file
+# shellcheck disable=SC2154
+: "${RED:?}" "${GREEN:?}" "${NC:?}"
 
 passed=0
 failed=0
@@ -24,13 +26,13 @@ test() {
   local expected="$2"
   local actual="$3"
 
-  if [[ "$expected" == "$actual" ]]; then
-    echo -e "${GREEN}✓${NC} $name"
+  if [[ "${expected}" == "${actual}" ]]; then
+    echo -e "${GREEN}✓${NC} ${name}"
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} $name"
-    echo "  Expected: $expected"
-    echo "  Got:      $actual"
+    echo -e "${RED}✗${NC} ${name}"
+    echo "  Expected: ${expected}"
+    echo "  Got:      ${actual}"
     failed=$((failed + 1))
   fi
 }
@@ -42,30 +44,43 @@ echo "========================================="
 # Test format_number()
 echo ""
 echo "Testing format_number()..."
-test "format_number 543" "543" "$(format_number 543)"
-test "format_number 999" "999" "$(format_number 999)"
-test "format_number 1000" "1.0K" "$(format_number 1000)"
-test "format_number 1500" "1.5K" "$(format_number 1500)"
-test "format_number 9999" "9.9K" "$(format_number 9999)"
-test "format_number 10000" "10K" "$(format_number 10000)"
-test "format_number 54000" "54K" "$(format_number 54000)"
-test "format_number 999999" "999K" "$(format_number 999999)"
-test "format_number 1000000" "1.0M" "$(format_number 1000000)"
-test "format_number 1200000" "1.2M" "$(format_number 1200000)"
-test "format_number 9999999" "9.9M" "$(format_number 9999999)"
-test "format_number 10000000" "10M" "$(format_number 10000000)"
-test "format_number 15000000" "15M" "$(format_number 15000000)"
+result=$(format_number 543)
+test "format_number 543" "543" "${result}"
+result=$(format_number 999)
+test "format_number 999" "999" "${result}"
+result=$(format_number 1000)
+test "format_number 1000" "1.0K" "${result}"
+result=$(format_number 1500)
+test "format_number 1500" "1.5K" "${result}"
+result=$(format_number 9999)
+test "format_number 9999" "9.9K" "${result}"
+result=$(format_number 10000)
+test "format_number 10000" "10K" "${result}"
+result=$(format_number 54000)
+test "format_number 54000" "54K" "${result}"
+result=$(format_number 999999)
+test "format_number 999999" "999K" "${result}"
+result=$(format_number 1000000)
+test "format_number 1000000" "1.0M" "${result}"
+result=$(format_number 1200000)
+test "format_number 1200000" "1.2M" "${result}"
+result=$(format_number 9999999)
+test "format_number 9999999" "9.9M" "${result}"
+result=$(format_number 10000000)
+test "format_number 10000000" "10M" "${result}"
+result=$(format_number 15000000)
+test "format_number 15000000" "15M" "${result}"
 
 # Test get_context_message() returns non-empty strings
 echo ""
 echo "Testing get_context_message()..."
 for percent in 10 25 50 75 95; do
-  message=$(get_context_message "$percent")
-  if [[ -n "$message" ]]; then
-    echo -e "${GREEN}✓${NC} get_context_message $percent% returned: \"$message\""
+  message=$(get_context_message "${percent}")
+  if [[ -n "${message}" ]]; then
+    echo -e "${GREEN}✓${NC} get_context_message ${percent}% returned: \"${message}\""
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} get_context_message $percent% returned empty"
+    echo -e "${RED}✗${NC} get_context_message ${percent}% returned empty"
     failed=$((failed + 1))
   fi
 done
@@ -83,29 +98,42 @@ msg_79=$(get_context_message 79)
 msg_81=$(get_context_message 81)
 
 # Just verify they're not empty (can't guarantee different due to randomness)
-test "tier boundary 19%" "non-empty" "$([ -n "$msg_19" ] && echo "non-empty")"
-test "tier boundary 21%" "non-empty" "$([ -n "$msg_21" ] && echo "non-empty")"
-test "tier boundary 39%" "non-empty" "$([ -n "$msg_39" ] && echo "non-empty")"
-test "tier boundary 41%" "non-empty" "$([ -n "$msg_41" ] && echo "non-empty")"
-test "tier boundary 59%" "non-empty" "$([ -n "$msg_59" ] && echo "non-empty")"
-test "tier boundary 61%" "non-empty" "$([ -n "$msg_61" ] && echo "non-empty")"
-test "tier boundary 79%" "non-empty" "$([ -n "$msg_79" ] && echo "non-empty")"
-test "tier boundary 81%" "non-empty" "$([ -n "$msg_81" ] && echo "non-empty")"
+result=$([[ -n "${msg_19}" ]] && echo "non-empty")
+test "tier boundary 19%" "non-empty" "${result}"
+result=$([[ -n "${msg_21}" ]] && echo "non-empty")
+test "tier boundary 21%" "non-empty" "${result}"
+result=$([[ -n "${msg_39}" ]] && echo "non-empty")
+test "tier boundary 39%" "non-empty" "${result}"
+result=$([[ -n "${msg_41}" ]] && echo "non-empty")
+test "tier boundary 41%" "non-empty" "${result}"
+result=$([[ -n "${msg_59}" ]] && echo "non-empty")
+test "tier boundary 59%" "non-empty" "${result}"
+result=$([[ -n "${msg_61}" ]] && echo "non-empty")
+test "tier boundary 61%" "non-empty" "${result}"
+result=$([[ -n "${msg_79}" ]] && echo "non-empty")
+test "tier boundary 79%" "non-empty" "${result}"
+result=$([[ -n "${msg_81}" ]] && echo "non-empty")
+test "tier boundary 81%" "non-empty" "${result}"
 
 # Test edge cases
 echo ""
 echo "Testing edge cases..."
-test "format_number 0" "0" "$(format_number 0)"
-test "get_context_message 0%" "non-empty" "$([ -n "$(get_context_message 0)" ] && echo "non-empty")"
-test "get_context_message 100%" "non-empty" "$([ -n "$(get_context_message 100)" ] && echo "non-empty")"
+result=$(format_number 0)
+test "format_number 0" "0" "${result}"
+msg=$(get_context_message 0)
+result=$([[ -n "${msg}" ]] && echo "non-empty")
+test "get_context_message 0%" "non-empty" "${result}"
+msg=$(get_context_message 100)
+result=$([[ -n "${msg}" ]] && echo "non-empty")
+test "get_context_message 100%" "non-empty" "${result}"
 
 echo ""
 echo "========================================="
-echo -e "Tests passed: ${GREEN}$passed${NC}"
-echo -e "Tests failed: ${RED}$failed${NC}"
+echo -e "Tests passed: ${GREEN}${passed}${NC}"
+echo -e "Tests failed: ${RED}${failed}${NC}"
 echo "========================================="
 
-if [[ "$failed" -eq 0 ]]; then
+if [[ "${failed}" -eq 0 ]]; then
   echo -e "${GREEN}All tests passed!${NC}"
   exit 0
 else

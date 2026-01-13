@@ -101,7 +101,6 @@ Component-based functional composition with SOLID principles, emphasizing:
 
 | Layer | Responsibility | Functions |
 |-------|----------------|-----------|
-| **Platform Detection** | Identify OS and set platform-specific constants | `detect_platform()` |
 | **Configuration** | Define constants for display (colors, icons, sizes) | Constants section |
 | **Utilities** | Reusable helper functions | `get_dirname()`, `sep()`, `append_if()`, `check_git_version()` |
 | **Parsing** | Extract data from JSON input | `parse_claude_input()` |
@@ -123,25 +122,20 @@ statusline.sh
 ├── Shebang & Shell Options (lines 1-2)
 │   └── Bash with error handling (set -euo pipefail)
 │
-├── PLATFORM DETECTION (lines 8-17)
-│   └── detect_platform() - Returns: macos|linux|wsl|mingw|unknown
-│
-├── CONFIGURATION (lines 22-59)
+├── CONFIGURATION (lines 7-33)
 │   ├── Display Constants (lines 22-33)
 │   │   ├── BAR_WIDTH=15
 │   │   ├── BAR_FILLED/EMPTY characters
 │   │   └── Color definitions (RED, GREEN, BLUE, etc.)
 │   │
-│   ├── Derived Constants (lines 36-38)
+│   ├── Derived Constants (lines 21-22)
 │   │   ├── SEPARATOR with color
-│   │   ├── NULL_VALUE="null"
-│   │   └── CONTEXT_DEFAULT=200000
+│   │   └── NULL_VALUE="null"
 │   │
-│   ├── Platform-Specific Icons (lines 41-54)
-│   │   ├── MinGW: ASCII fallback (>, [, @, *)
-│   │   └── Others: Unicode emojis (🚀, 🔥, 📂, 🎋)
+│   ├── Icons (lines 24-28)
+│   │   └── Unicode emojis (🚀, 🔥, 📂, 🎋)
 │   │
-│   └── Git State Constants (lines 57-59)
+│   └── Git State Constants (lines 30-32)
 │       ├── STATE_NOT_REPO
 │       ├── STATE_CLEAN
 │       └── STATE_DIRTY
@@ -243,7 +237,6 @@ statusline.sh
 
 | Function | Lines | Purpose | Returns |
 |----------|-------|---------|---------|
-| `detect_platform()` | 8-15 | Identify OS | Platform string |
 | `get_dirname()` | 66 | Extract basename | Directory name |
 | `sep()` | 67 | Output separator | Gray pipe separator |
 | `append_if()` | 70-76 | Conditional append | Text or empty |
@@ -385,28 +378,7 @@ Output Display
 
 ## Key Implementation Details
 
-### 1. Platform Detection
-
-**Location**: Lines 8-17
-
-```bash
-detect_platform() {
-  case "${OSTYPE:-}" in
-    darwin*) echo "macos" ;;
-    linux*) grep -q Microsoft /proc/version 2>/dev/null && echo "wsl" || echo "linux" ;;
-    msys*|mingw*|cygwin*) echo "mingw" ;;
-    *) uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo "unknown" ;;
-  esac
-}
-```
-
-**Why this approach?**
-- `OSTYPE` is fastest (no subprocess)
-- WSL detection via `/proc/version` check
-- Fallback to `uname` for unknown systems
-- Used to determine icon set (emojis vs ASCII)
-
-### 2. JSON Parsing Strategy
+### 1. JSON Parsing Strategy
 
 **Location**: Lines 110-132
 
@@ -444,7 +416,7 @@ parse_claude_input() {
 
 **Null handling**: Uses jq's `//` (alternative operator) for defaults
 
-### 3. Git Operations Optimization
+### 2. Git Operations Optimization
 
 **Location**: Lines 148-214
 
@@ -477,7 +449,7 @@ Provides:
 
 **Performance gain**: ~71% reduction in git subprocess calls
 
-### 4. Progress Bar Visualization
+### 3. Progress Bar Visualization
 
 **Location**: Lines 134-142
 
@@ -503,7 +475,7 @@ build_progress_bar() {
 ████████████░░░  (80% usage)
 ```
 
-### 5. Color Scheme
+### 4. Color Scheme
 
 **Location**: Lines 26-33
 
@@ -522,7 +494,7 @@ build_progress_bar() {
 - Semantic color associations
 - Consistent with common terminal conventions
 
-### 6. Null Value Handling
+### 5. Null Value Handling
 
 **Pattern used throughout**:
 
@@ -539,7 +511,7 @@ fi
 - Handles missing values (empty string)
 - Handles zero values
 
-### 7. Git Version Caching
+### 6. Git Version Caching
 
 **Location**: Lines 80-104
 
@@ -1017,7 +989,7 @@ git diff HEAD --numstat
 | **Slow performance** | Statusline lags | Check git repo size, optimize operations |
 | **Git errors** | Error messages in statusline | Verify git version 2.11+, check repo integrity |
 | **JSON parse errors** | Statusline not displaying | Verify JSON schema matches parse_claude_input() |
-| **Missing icons** | Empty squares | Check terminal emoji support, use ASCII fallback |
+| **Missing icons** | Empty squares or broken chars | Verify terminal has emoji support (modern terminals recommended) |
 | **Wrong colors** | Colors not appearing | Verify ANSI support, check color code variables |
 
 ### Version Control Best Practices
@@ -1062,7 +1034,7 @@ main
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| **bash** | 4.0+ | Shell interpreter |
+| **bash** | 3.2+ | Shell interpreter |
 | **jq** | 1.5+ | JSON parsing |
 | **git** | 2.11+ | Git operations (porcelain v2) |
 

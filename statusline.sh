@@ -2,22 +2,6 @@
 set -euo pipefail 2>/dev/null || set -eu  # Conditional pipefail for POSIX compatibility
 
 # ============================================================
-# PLATFORM DETECTION
-# ============================================================
-
-detect_platform() {
-  case "${OSTYPE:-}" in
-    darwin*) echo "macos" ;;
-    linux*) grep -q Microsoft /proc/version 2>/dev/null && echo "wsl" || echo "linux" ;;
-    msys*|mingw*|cygwin*) echo "mingw" ;;
-    *) uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo "unknown" ;;
-  esac
-}
-
-PLATFORM=$(detect_platform)
-readonly PLATFORM
-
-# ============================================================
 # CONFIGURATION
 # ============================================================
 readonly BAR_WIDTH=15
@@ -37,21 +21,11 @@ readonly NC='\033[0m'
 readonly SEPARATOR="${GRAY}|${NC}"
 readonly NULL_VALUE="null"
 
-# Platform-specific icons (ASCII fallback for MINGW)
-case "${PLATFORM}" in
-  mingw)
-    readonly MODEL_ICON=">"
-    readonly CONTEXT_ICON="["
-    readonly DIR_ICON="@"
-    readonly GIT_ICON="*"
-    ;;
-  *)
-    readonly MODEL_ICON="🚀"
-    readonly CONTEXT_ICON="🔥"
-    readonly DIR_ICON="📂"
-    readonly GIT_ICON="🎋"
-    ;;
-esac
+# Icons
+readonly MODEL_ICON="🚀"
+readonly CONTEXT_ICON="🔥"
+readonly DIR_ICON="📂"
+readonly GIT_ICON="🎋"
 
 # Git state constants
 readonly STATE_NOT_REPO="not_repo"
