@@ -68,18 +68,37 @@ sudo yum install jq git
 
 ## Installation
 
-### Method 1: Using install.sh (Recommended)
+### Quick Install (Recommended)
+
+Install with a single command using curl:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
+```
+
+This will:
+- ✅ Check dependencies (bash 3.2+, jq, git 2.11+)
+- ✅ Download statusline.sh to `~/.claude/statusline.sh`
+- ✅ Make it executable
+- ✅ Backup any existing installation
+- ✅ Show platform-specific install instructions for missing dependencies
+
+### From Source (Local Development)
+
+For local development:
 
 ```bash
 # Clone the repository
 git clone https://github.com/glauberlima/claude-code-statusline.git
 cd claude-code-statusline
 
-# Run the installer (creates symlink to ~/.claude/statusline.sh)
+# Run the installer (copies statusline.sh to ~/.claude/statusline.sh)
 ./install.sh
 ```
 
-### Method 2: Manual Installation
+After making changes to statusline.sh, run `./install.sh` again to update the installed version.
+
+### Manual Installation
 
 ```bash
 # Download the script
@@ -87,16 +106,6 @@ curl -o ~/.claude/statusline.sh https://raw.githubusercontent.com/glauberlima/cl
 
 # Make it executable
 chmod +x ~/.claude/statusline.sh
-```
-
-### Method 3: Direct Symlink
-
-```bash
-# Clone the repository
-git clone https://github.com/glauberlima/claude-code-statusline.git
-
-# Create symlink
-ln -s "$(pwd)/claude-code-statusline/statusline.sh" ~/.claude/statusline.sh
 ```
 
 ## Configuration

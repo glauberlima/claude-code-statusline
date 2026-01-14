@@ -14,6 +14,7 @@
 ## Table of Contents
 
 - [Project Overview](#project-overview)
+- [Installation](#installation)
 - [Architecture](#architecture)
 - [Codebase Structure](#codebase-structure)
 - [Design Patterns](#design-patterns)
@@ -47,6 +48,244 @@ Component-based functional composition with SOLID principles, emphasizing:
 - **Performance**: Optimized git operations (7 calls → 2 calls)
 - **Maintainability**: Clear function boundaries, DRY principles
 - **Extensibility**: Easy to add new components without modifying existing code
+
+---
+
+## Installation
+
+### Overview
+
+The project includes a simple installation script (`install.sh`) that:
+- Downloads statusline.sh from GitHub
+- Copies it to `~/.claude/statusline.sh`
+- Works both via curl pipe and local execution
+
+### Installation Flow
+
+```
+User executes: curl -fsSL https://... | bash
+  OR: ./install.sh from local repository
+    ↓
+Check dependencies (bash 3.2+, jq, git 2.11+)
+    ↓ [missing deps]
+Display platform-specific install commands → EXIT 1
+    ↓ [all present]
+Create temp file (mktemp)
+    ↓
+Download statusline.sh from GitHub (curl/wget fallback)
+    ↓
+Validate file (bash shebang, expected content)
+    ↓
+Backup existing ~/.claude/statusline.sh if present
+    ↓
+Copy to ~/.claude/statusline.sh
+    ↓
+chmod +x
+    ↓
+Cleanup temp file
+    ↓
+Show success message with configuration instructions
+```
+
+### Key Components
+
+#### 1. Dependency Validation
+
+**Function**: `check_dependencies()` (install.sh:59-83)
+
+Validates three critical dependencies:
+- **bash 3.2+**: Uses `BASH_VERSINFO` array for version comparison
+- **jq**: Required for JSON parsing, checked via `command -v`
+- **git 2.11+**: Parses version string, validates major.minor >= 2.11
+
+Missing dependencies trigger `show_install_instructions()` with platform-specific commands (brew/apt/yum detection).
+
+**Why version checks**:
+- bash 3.2: Introduced `BASH_VERSINFO`, required for statusline features
+- git 2.11: First version with porcelain v2 format (performance optimization)
+- jq: Any 1.5+ version works; installer checks presence only
+
+#### 2. Download with Fallback
+
+**Function**: `download_file()` (install.sh:124-144)
+
+Tries curl first (most common), falls back to wget:
+```bash
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "${url}" -o "${dest}"
+elif command -v wget >/dev/null 2>&1; then
+  wget -q -O "${dest}" "${url}"
+else
+  echo "Error: curl or wget required"
+  return 1
+fi
+```
+
+**curl flags**:
+- `-f`: Fail silently on HTTP errors (exit code 22)
+- `-s`: Silent mode (no progress bar for pipe compatibility)
+- `-S`: Show errors even in silent mode
+- `-L`: Follow redirects (GitHub may redirect raw URLs)
+
+#### 3. File Validation
+
+**Function**: `validate_file()` (install.sh:147-169)
+
+Three-tier validation prevents corrupted installations:
+1. **File exists and non-empty**: `[[ -s "${file}" ]]`
+2. **Bash shebang present**: `head -n1 | grep '^#!/.*bash'`
+3. **Expected content check**: `grep 'assemble_statusline'`
+
+**Why this matters**:
+- Catches network errors returning HTML error pages
+- Prevents installing wrong file from GitHub
+- Detects truncated downloads
+
+#### 4. Atomic Installation
+
+**Function**: `install_statusline()` (install.sh:172-210)
+
+Ensures all-or-nothing installation:
+```bash
+# Backup existing
+backup="${TARGET_FILE}.backup.$(date +%s)"
+mv "${TARGET_FILE}" "${backup}"
+
+# Copy file to target
+cp "${source}" "${TARGET_FILE}" || {
+  echo "Error: Failed to copy file"
+  [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
+  return 1
+}
+
+chmod +x "${TARGET_FILE}"
+```
+
+**Error recovery**: All operations check exit codes; backup restored on failure
+
+#### 5. Cleanup on Error
+
+**Function**: `cleanup_on_error()` (install.sh:17-21)
+
+Trap-based cleanup ensures no partial installations:
+```bash
+trap cleanup_on_error ERR INT TERM
+
+cleanup_on_error() {
+  [[ -n "${TEMP_FILE}" ]] && rm -f "${TEMP_FILE}"
+  echo "Installation failed. No changes made."
+  exit 1
+}
+```
+
+**Critical signals**:
+- `ERR`: Any command fails with `set -e`
+- `INT`: User Ctrl+C
+- `TERM`: Process killed
+
+### Configuration
+
+#### GitHub URL Override
+
+Default URL points to main branch:
+```bash
+readonly GITHUB_RAW_URL="${STATUSLINE_INSTALL_URL:-https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/statusline.sh}"
+```
+
+**Custom URL usage** (for forks/testing):
+```bash
+STATUSLINE_INSTALL_URL="https://raw.githubusercontent.com/user/fork/branch/statusline.sh" curl ... | bash
+```
+
+#### Target Location
+
+Hardcoded to Claude Code convention:
+```bash
+readonly TARGET_DIR="${HOME}/.claude"
+readonly TARGET_FILE="${TARGET_DIR}/statusline.sh"
+```
+
+This matches Claude Code's expected location from `settings.json`.
+
+### Error Handling
+
+#### Non-Interactive Design
+
+**Requirement**: Must work when piped from curl (no tty).
+
+**Constraints**:
+- No user prompts
+- All decisions automatic
+- Clear error prefixes for parsing
+
+#### Failure Scenarios
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| Missing dependencies | `command -v` check | Show platform-specific install, EXIT 1 |
+| Download failed | HTTP error or empty file | Cleanup temp, EXIT 1 |
+| Corrupted download | Content validation | Cleanup temp, EXIT 1 |
+| Disk full | `cp`/`mv` exit code | Restore backup, EXIT 1 |
+| Permission denied | `mkdir`/`chmod` exit code | Show permission fix, EXIT 1 |
+
+#### Validation Strategy
+
+**Layers** (fail fast):
+1. **Before download**: Check dependencies
+2. **After download**: Validate file content
+3. **During install**: Check each operation exit code
+4. **On any error**: Cleanup temp files, restore backup
+
+### Testing Approach
+
+#### Installation Test
+```bash
+# From repository
+cd repository && ./install.sh
+# Should download and copy file
+
+# From remote (curl pipe simulation)
+python3 -m http.server 8000 &
+curl -fsSL http://localhost:8000/install.sh | bash
+# Should download and copy file
+```
+
+#### Missing Dependencies Test
+```bash
+# Use minimal Docker container
+docker run --rm -it alpine:latest /bin/sh
+# (alpine lacks jq by default)
+```
+
+### Design Decisions
+
+#### Why Always Copy (No Symlink)?
+
+**Simplicity over convenience**:
+- Single installation method for all users
+- No confusion between local/remote modes
+- Installed file is standalone and portable
+- Consistent behavior regardless of execution method
+
+**For developers:**
+- Re-run `./install.sh` after changes (fast, < 1 second)
+- Still works from local repository
+- No additional setup required
+
+**Trade-off accepted**: Lost instant reflection of changes, but gained simplicity and predictability
+
+#### Why Not Auto-Configure settings.json?
+
+**Safety over convenience**:
+- Avoids overwriting existing configurations
+- Prevents breaking user's custom settings
+- Transparent - user reviews changes before applying
+- Follows principle of least surprise
+
+**Alternative rejected**: Using jq to merge configuration automatically
+- Risk: Could corrupt malformed JSON
+- Risk: Might overwrite user's custom statusLine settings
+- Benefit minimal: Configuration is one-time, manual is safer
 
 ---
 
