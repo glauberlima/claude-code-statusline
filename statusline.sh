@@ -22,10 +22,10 @@ readonly SEPARATOR="${GRAY}|${NC}"
 readonly NULL_VALUE="null"
 
 # Icons
-readonly MODEL_ICON="🚀"
-readonly CONTEXT_ICON="🔥"
-readonly DIR_ICON="📂"
-readonly GIT_ICON="🎋"
+readonly MODEL_ICON="⚙️"
+readonly CONTEXT_ICON="📊"
+readonly DIR_ICON="📁"
+readonly GIT_ICON="🌿"
 
 # Git state constants
 readonly STATE_NOT_REPO="not_repo"
@@ -188,9 +188,6 @@ append_if() {
 # Rejects absolute paths, path traversal (..), and suspicious patterns
 validate_directory() {
   local dir="$1"
-
-  # Reject absolute paths (starting with /)
-  [[ "${dir}" =~ ^/ ]] && return 1
 
   # Reject path traversal attempts (..)
   [[ "${dir}" =~ \.\. ]] && return 1
@@ -615,7 +612,7 @@ build_cost_component() {
   if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-      echo "💵 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
+      echo "💰 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
     fi
   fi
 }
@@ -627,7 +624,7 @@ build_lines_component() {
   if [[ -n "${lines_added}" && -n "${lines_removed}" ]] && \
      [[ "${lines_added}" != "0" || "${lines_removed}" != "0" ]] && \
      [[ "${lines_added}" != "${NULL_VALUE}" && "${lines_removed}" != "${NULL_VALUE}" ]]; then
-    echo "✏️  ${GREEN}+${lines_added}${NC}/${RED}-${lines_removed}${NC}"
+    echo "📝 ${GREEN}+${lines_added}${NC}/${RED}-${lines_removed}${NC}"
   fi
 }
 

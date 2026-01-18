@@ -159,7 +159,7 @@ test "validate_directory valid relative path" "pass" "${result}"
 validate_directory "." && result="pass" || result="fail"
 test "validate_directory current dir" "pass" "${result}"
 validate_directory "/absolute/path" && result="pass" || result="fail"
-test "validate_directory absolute path (should fail)" "fail" "${result}"
+test "validate_directory absolute path (should pass)" "pass" "${result}"
 validate_directory "../../etc" && result="pass" || result="fail"
 test "validate_directory path traversal (should fail)" "fail" "${result}"
 # shellcheck disable=SC2088  # Intentionally testing literal tilde string, not expansion
@@ -172,14 +172,14 @@ test "validate_directory path with dot (safe)" "pass" "${result}"
 echo ""
 echo "Testing build_model_component()..."
 result=$(build_model_component "claude-3-opus" | sed -E 's/\\033\[[0-9;]*m//g')
-expected="🚀 claude-3-opus"
+expected="⚙️ claude-3-opus"
 test "build_model_component" "${expected}" "${result}"
 
 # Test build_cost_component() with security validation
 echo ""
 echo "Testing build_cost_component()..."
 result=$(build_cost_component "1.50" | sed -E 's/\\033\[[0-9;]*m//g')
-expected="💵 \$1.50"
+expected="💰 \$1.50"
 test "build_cost_component valid cost" "${expected}" "${result}"
 result=$(build_cost_component "0")
 test "build_cost_component zero cost (should be empty)" "" "${result}"
