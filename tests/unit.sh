@@ -127,6 +127,81 @@ msg=$(get_context_message 100)
 result=$([[ -n "${msg}" ]] && echo "non-empty")
 test "get_context_message 100%" "non-empty" "${result}"
 
+# Test get_context_tier()
+echo ""
+echo "Testing get_context_tier()..."
+result=$(get_context_tier 10)
+test "get_context_tier 10%" "0" "${result}"
+result=$(get_context_tier 20)
+test "get_context_tier 20%" "0" "${result}"
+result=$(get_context_tier 21)
+test "get_context_tier 21%" "1" "${result}"
+result=$(get_context_tier 40)
+test "get_context_tier 40%" "1" "${result}"
+result=$(get_context_tier 41)
+test "get_context_tier 41%" "2" "${result}"
+result=$(get_context_tier 60)
+test "get_context_tier 60%" "2" "${result}"
+result=$(get_context_tier 61)
+test "get_context_tier 61%" "3" "${result}"
+result=$(get_context_tier 80)
+test "get_context_tier 80%" "3" "${result}"
+result=$(get_context_tier 81)
+test "get_context_tier 81%" "4" "${result}"
+result=$(get_context_tier 100)
+test "get_context_tier 100%" "4" "${result}"
+
+# Test validate_directory() - security function
+echo ""
+echo "Testing validate_directory()..."
+validate_directory "valid/relative/path" && result="pass" || result="fail"
+test "validate_directory valid relative path" "pass" "${result}"
+validate_directory "." && result="pass" || result="fail"
+test "validate_directory current dir" "pass" "${result}"
+validate_directory "/absolute/path" && result="pass" || result="fail"
+test "validate_directory absolute path (should fail)" "fail" "${result}"
+validate_directory "../../etc" && result="pass" || result="fail"
+test "validate_directory path traversal (should fail)" "fail" "${result}"
+# shellcheck disable=SC2088  # Intentionally testing literal tilde string, not expansion
+validate_directory "~/.ssh" && result="pass" || result="fail"
+test "validate_directory tilde path (should fail)" "fail" "${result}"
+validate_directory "safe/./path" && result="pass" || result="fail"
+test "validate_directory path with dot (safe)" "pass" "${result}"
+
+# Test build_model_component()
+echo ""
+echo "Testing build_model_component()..."
+result=$(build_model_component "claude-3-opus" | sed -E 's/\\033\[[0-9;]*m//g')
+expected="🚀 claude-3-opus"
+test "build_model_component" "${expected}" "${result}"
+
+# Test build_cost_component() with security validation
+echo ""
+echo "Testing build_cost_component()..."
+result=$(build_cost_component "1.50" | sed -E 's/\\033\[[0-9;]*m//g')
+expected="💵 \$1.50"
+test "build_cost_component valid cost" "${expected}" "${result}"
+result=$(build_cost_component "0")
+test "build_cost_component zero cost (should be empty)" "" "${result}"
+result=$(build_cost_component "%x %x %x")
+test "build_cost_component format string (should be empty)" "" "${result}"
+result=$(build_cost_component "malicious")
+test "build_cost_component non-numeric (should be empty)" "" "${result}"
+
+# Test build_files_component()
+echo ""
+echo "Testing build_files_component()..."
+result=$(build_files_component "5" | sed -E 's/\\033\[[0-9;]*m//g')
+expected="5 files"
+test "build_files_component 5 files" "${expected}" "${result}"
+result=$(build_files_component "1" | sed -E 's/\\033\[[0-9;]*m//g')
+expected="1 files"
+test "build_files_component 1 file" "${expected}" "${result}"
+result=$(build_files_component "0")
+test "build_files_component 0 files (should be empty)" "" "${result}"
+result=$(build_files_component "")
+test "build_files_component empty (should be empty)" "" "${result}"
+
 echo ""
 echo "========================================="
 echo -e "Tests passed: ${GREEN}${passed}${NC}"

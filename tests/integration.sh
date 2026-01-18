@@ -133,6 +133,62 @@ main() {
     }
   }'
 
+  # Security Tests
+  echo ""
+  echo -e "${YELLOW}=== Security Tests ===${NC}"
+
+  # Test 8: Directory traversal attack
+  run_test "Security: Directory traversal (../../../../etc)" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "../../../../etc"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 1000}
+    }
+  }'
+
+  # Test 9: Absolute path attack
+  run_test "Security: Absolute path (/tmp/malicious)" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "/tmp/malicious"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 1000}
+    }
+  }'
+
+  # Test 10: Format string injection in cost
+  run_test "Security: Format string injection (%x %x %x)" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 1000}
+    },
+    "cost": {"total_cost_usd": "%x %x %x"}
+  }'
+
+  # Test 11: Tilde path expansion
+  run_test "Security: Tilde path (~/.ssh)" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "~/.ssh"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 1000}
+    }
+  }'
+
+  # Test 12: Invalid cost values
+  run_test "Security: Non-numeric cost (malicious)" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 1000}
+    },
+    "cost": {"total_cost_usd": "malicious_string"}
+  }'
+
   # Summary
   echo -e "\n${YELLOW}=== Test Summary ===${NC}"
   echo "Total tests: ${TOTAL}"

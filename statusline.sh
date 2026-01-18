@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail 2>/dev/null || set -eu  # Conditional pipefail for POSIX compatibility
+set -euo pipefail  # Exit on error, undefined vars, pipe failures (bash 3.2+)
 
 # ============================================================
 # CONFIGURATION
@@ -184,6 +184,23 @@ append_if() {
   fi
 }
 
+# Validate directory path for security
+# Rejects absolute paths, path traversal (..), and suspicious patterns
+validate_directory() {
+  local dir="$1"
+
+  # Reject absolute paths (starting with /)
+  [[ "${dir}" =~ ^/ ]] && return 1
+
+  # Reject path traversal attempts (..)
+  [[ "${dir}" =~ \.\. ]] && return 1
+
+  # Reject paths starting with ~
+  [[ "${dir}" =~ ^~ ]] && return 1
+
+  return 0
+}
+
 # Format numbers with K/M suffixes for readability
 # Examples: 543 -> "543", 1500 -> "1.5K", 54000 -> "54K", 1200000 -> "1.2M"
 format_number() {
@@ -248,6 +265,24 @@ EOF
 # FUNCTIONS
 # ============================================================
 
+# Get context usage tier (0-4) based on percentage
+# Tiers: 0=very_low (0-20%), 1=low (21-40%), 2=medium (41-60%), 3=high (61-80%), 4=critical (81-100%)
+get_context_tier() {
+  local percent="$1"
+
+  if [[ "${percent}" -le 20 ]]; then
+    echo 0  # Very low
+  elif [[ "${percent}" -le 40 ]]; then
+    echo 1  # Low
+  elif [[ "${percent}" -le 60 ]]; then
+    echo 2  # Medium
+  elif [[ "${percent}" -le 80 ]]; then
+    echo 3  # High
+  else
+    echo 4  # Critical
+  fi
+}
+
 parse_claude_input() {
   local input="$1"
 
@@ -277,19 +312,18 @@ build_progress_bar() {
   local filled=$((percent * BAR_WIDTH / 100))
   local empty=$((BAR_WIDTH - filled))
 
-  # Determine bar color based on percentage
-  local bar_color
-  if [[ "${percent}" -le 20 ]]; then
-    bar_color="${GREEN}"
-  elif [[ "${percent}" -le 40 ]]; then
-    bar_color="${CYAN}"
-  elif [[ "${percent}" -le 60 ]]; then
-    bar_color="${ORANGE}"
-  elif [[ "${percent}" -le 80 ]]; then
-    bar_color="${ORANGE}"
-  else
-    bar_color="${RED}"
-  fi
+  # Determine bar color based on tier
+  local tier bar_color
+  tier=$(get_context_tier "${percent}")
+
+  case "${tier}" in
+    0) bar_color="${GREEN}" ;;    # Very low
+    1) bar_color="${CYAN}" ;;     # Low
+    2) bar_color="${ORANGE}" ;;   # Medium
+    3) bar_color="${ORANGE}" ;;   # High
+    4) bar_color="${RED}" ;;      # Critical
+    *) bar_color="${GRAY}" ;;     # Fallback
+  esac
 
   # Build colored filled portion and gray empty portion
   echo -n "${bar_color}"
@@ -305,17 +339,17 @@ get_context_message() {
   local messages=()
 
   # Determine tier and select message array
-  if [[ "${percent}" -le 20 ]]; then
-    messages=("${CONTEXT_MSG_VERY_LOW[@]}")
-  elif [[ "${percent}" -le 40 ]]; then
-    messages=("${CONTEXT_MSG_LOW[@]}")
-  elif [[ "${percent}" -le 60 ]]; then
-    messages=("${CONTEXT_MSG_MEDIUM[@]}")
-  elif [[ "${percent}" -le 80 ]]; then
-    messages=("${CONTEXT_MSG_HIGH[@]}")
-  else
-    messages=("${CONTEXT_MSG_CRITICAL[@]}")
-  fi
+  local tier
+  tier=$(get_context_tier "${percent}")
+
+  case "${tier}" in
+    0) messages=("${CONTEXT_MSG_VERY_LOW[@]}") ;;
+    1) messages=("${CONTEXT_MSG_LOW[@]}") ;;
+    2) messages=("${CONTEXT_MSG_MEDIUM[@]}") ;;
+    3) messages=("${CONTEXT_MSG_HIGH[@]}") ;;
+    4) messages=("${CONTEXT_MSG_CRITICAL[@]}") ;;
+    *) messages=("unknown tier") ;;  # Fallback
+  esac
 
   # Random selection using bash $RANDOM
   local count=${#messages[@]}
@@ -331,7 +365,20 @@ get_git_info() {
   local current_dir="$1"
   local git_opts=()
 
-  [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]] && git_opts=(-C "${current_dir}")
+  # Validate and set git directory option
+  if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]]; then
+    # Invoke validation separately to avoid masking return value
+    local validation_result=0
+    validate_directory "${current_dir}"
+    validation_result=$?
+    if [[ "${validation_result}" -eq 0 ]]; then
+      git_opts=(-C "${current_dir}")
+    else
+      # Invalid directory path - treat as not a repo
+      echo "${STATE_NOT_REPO}"
+      return 0
+    fi
+  fi
 
   # Check if git repo
   git "${git_opts[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
@@ -347,8 +394,8 @@ get_git_info() {
     return 0
   }
 
-  # Parse porcelain v2 output
-  local branch ahead behind
+  # Parse porcelain v2 output and count files in single pass
+  local branch ahead behind total_files=0
   while IFS= read -r line; do
     case "${line}" in
       "# branch.head "*)
@@ -361,8 +408,12 @@ get_git_info() {
         behind="${ab##* }"
         behind="${behind#-}"
         ;;
+      "#"*)
+        # Ignore other comment lines
+        ;;
       *)
-        # Ignore other porcelain output lines
+        # Non-comment lines are file status entries - count them
+        [[ -n "${line}" ]] && ((total_files++))
         ;;
     esac
   done << EOF
@@ -373,12 +424,6 @@ EOF
   branch="${branch:-(detached HEAD)}"
   ahead="${ahead:-0}"
   behind="${behind:-0}"
-
-  # Count modified files (lines not starting with #)
-  local file_lines
-  file_lines=$(echo "${status_output}" | grep -v '^#')
-  local total_files=0
-  [[ -n "${file_lines}" ]] && total_files=$(echo "${file_lines}" | wc -l | tr -d ' ')
 
   # Clean state if no files
   if [[ "${total_files}" -eq 0 ]]; then
@@ -450,29 +495,32 @@ EOF
 
   case "${state}" in
     "${STATE_NOT_REPO}")
-      format_git_not_repo
-      echo ""  # No file count
+      # Returns "git_output|file_count" (empty file count)
+      local not_repo_msg
+      not_repo_msg=$(format_git_not_repo)
+      echo "${not_repo_msg}|"
       ;;
     "${STATE_CLEAN}")
       local branch ahead behind
       IFS='|' read -r _ branch ahead behind << EOF
 ${git_data}
 EOF
-      format_git_clean "${branch}" "${ahead}" "${behind}"
-      echo ""  # No file count for clean repo
+      # Returns "git_output|file_count" (empty file count for clean)
+      local clean_msg
+      clean_msg=$(format_git_clean "${branch}" "${ahead}" "${behind}")
+      echo "${clean_msg}|"
       ;;
     "${STATE_DIRTY}")
       local branch files added removed ahead behind
       IFS='|' read -r _ branch files added removed ahead behind << EOF
 ${git_data}
 EOF
-      # Returns "git_output|file_count"
+      # Already returns "git_output|file_count"
       format_git_dirty "${branch}" "${files}" "${added}" "${removed}" "${ahead}" "${behind}"
       ;;
     *)
       # Unknown state - show error
-      echo " ${ORANGE}(unknown git state)${NC}"
-      echo ""  # No file count
+      echo " ${ORANGE}(unknown git state)${NC}|"
       ;;
   esac
 }
@@ -532,11 +580,10 @@ build_git_component() {
 
   git_data=$(get_git_info "${current_dir}")
 
-  # format_git_info returns two lines: git_output and file_count
+  # format_git_info returns "git_output|file_count" format
   local formatted git_line file_line
   formatted=$(format_git_info "${git_data}")
-  git_line=$(echo "${formatted}" | sed -n '1p')
-  file_line=$(echo "${formatted}" | sed -n '2p')
+  IFS='|' read -r git_line file_line <<< "${formatted}"
 
   # Extract state to determine emoji placement
   local state
@@ -564,8 +611,12 @@ build_files_component() {
 build_cost_component() {
   local cost_usd="$1"
 
+  # Validate cost is numeric before printf (prevents format string injection)
   if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
-    echo "💵 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
+    # Check if value is a valid number (integer or decimal)
+    if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      echo "💵 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
+    fi
   fi
 }
 
