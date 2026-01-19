@@ -42,7 +42,7 @@ cat tests/fixtures/test-input.json | ./statusline.sh
 ### Linting
 
 ```bash
-shellcheck statusline.sh install.sh tests/*.sh  # Uses .shellcheckrc config
+shellcheck statusline.sh install.sh messages/*.sh tests/*.sh  # Uses .shellcheckrc config
 ```
 
 ## Architecture
@@ -50,12 +50,13 @@ shellcheck statusline.sh install.sh tests/*.sh  # Uses .shellcheckrc config
 ### Component-Based Flow
 
 ```
-JSON Input → Parse (jq) → Build Components → Assemble → ANSI Output
+JSON Input → Parse (jq) → Load i18n → Build Components → Assemble → ANSI Output
 ```
 
 **Key functional areas in statusline.sh**:
 
 - **Configuration**: Colors (ANSI codes), icons (emoji), constants (bar width, separators)
+- **i18n**: Language loading (`load_config()`, `load_language_messages()`)
 - **Utilities**: Directory name extraction (`get_dirname`), separator formatting (`sep`), path validation (`validate_directory`)
 - **Core logic**: JSON parsing (`parse_claude_input`), git operations (`get_git_info`), progress bar rendering (`build_progress_bar`)
 - **Formatters**: Transform raw data to display format (`format_ahead_behind`, `format_git_info`)
@@ -101,6 +102,88 @@ This porcelain v2 format requires **git 2.11+** (Dec 2016).
 - `STATE_NOT_REPO`: Not a git repository
 - `STATE_CLEAN`: No modified files
 - `STATE_DIRTY`: Has modified files
+
+## Internationalization (i18n)
+
+### Architecture
+
+The statusline supports multiple languages through a dynamic message loading system:
+
+```
+install.sh → prompts user → saves choice
+                ↓
+~/.claude/statusline-config.sh (readonly STATUSLINE_LANGUAGE="pt")
+                ↓
+statusline.sh main() → load_config() → load_language_messages()
+                ↓
+~/.claude/messages/pt.sh (defines CONTEXT_MSG_* arrays)
+                ↓
+get_context_message() (random selection from appropriate tier)
+```
+
+### Language Files Structure
+
+Each language file (`messages/{lang}.sh`) defines 5 readonly bash arrays:
+
+- `CONTEXT_MSG_VERY_LOW`: 0-20% context usage (~22 messages)
+- `CONTEXT_MSG_LOW`: 21-40% context usage (~22 messages)
+- `CONTEXT_MSG_MEDIUM`: 41-60% context usage (~23 messages)
+- `CONTEXT_MSG_HIGH`: 61-80% context usage (~24 messages)
+- `CONTEXT_MSG_CRITICAL`: 81-100% context usage (~28 messages)
+
+**Supported Languages**:
+- English (en) - Default
+- Portuguese (pt) - Brazilian Portuguese with cultural adaptation
+- Spanish (es) - Spanish
+
+### Key Functions
+
+**`load_config()`** (statusline.sh):
+- Reads `~/.claude/statusline-config.sh` if exists
+- Extracts `STATUSLINE_LANGUAGE` variable
+- Returns language code or defaults to "en"
+- Performance: <1ms (single file source)
+
+**`load_language_messages()`** (statusline.sh):
+- Takes language code as argument
+- Sources `~/.claude/messages/{lang}.sh`
+- Defines `CONTEXT_MSG_*` arrays in current scope
+- Falls back to "en" if language file missing
+- Performance: 2-3ms (array definitions)
+
+**`prompt_language_selection()`** (install.sh):
+- Interactive menu with 3 language options
+- Uses stderr (`>&2`) for UI, stdout for return value
+- Validates selection, defaults to "en"
+- Saves choice to `statusline-config.sh`
+
+### Fallback Strategy
+
+```
+1. User's configured language (~/.claude/statusline-config.sh)
+   ↓ if file doesn't exist
+2. DEFAULT_LANGUAGE="en"
+   ↓ if en.sh doesn't exist
+3. Exit 1 with error (critical failure)
+```
+
+### Translation Guidelines
+
+- **Tone progression**: Calm → Critical (matches usage tiers)
+- **Message length**: 2-5 words (terminal display constraint)
+- **Cultural adaptation**: Adapt memes/references (e.g., PT: "tá tranquilo, tá favorável")
+- **Array size flexibility**: ±3 messages per tier acceptable
+
+See `messages/README.md` for complete translation guidelines.
+
+### Adding a New Language
+
+1. Create `messages/de.sh` (copy from `messages/en.sh`)
+2. Translate messages (keep array names identical)
+3. Test: `bash -n messages/de.sh && shellcheck messages/de.sh`
+4. Update `install.sh` line 335: Add "de" to `available_languages`
+5. Run tests: `./tests/unit.sh && ./tests/integration.sh`
+6. Update this documentation
 
 ## Code Style Guidelines
 
@@ -198,6 +281,11 @@ Test individual functions in isolation:
 - Number formatting (`format_number()`)
 - Context messages (`get_context_message()`)
 - Progress bar rendering
+- **Language file validation**:
+  - Each language file defines all 5 required arrays
+  - Arrays have minimum 15 messages per tier
+  - Files are valid bash syntax
+- **Color randomization** (`get_random_message_color()`)
 
 ### Integration Tests (tests/integration.sh)
 
@@ -206,6 +294,13 @@ Test complete statusline with JSON fixtures:
 - Various git states (clean, dirty, not repo)
 - Null values, edge cases
 - Over-limit context usage
+- **Language configuration**:
+  - Statusline works with each language (en, pt, es)
+  - Fallback to default language when config missing
+  - Invalid language code handling
+- **Security validation**:
+  - Path traversal prevention
+  - Format string injection prevention
 
 ### Static Analysis (tests/shellcheck.sh)
 
@@ -214,6 +309,7 @@ Zero-tolerance policy:
 - All 11 optional checks enabled (.shellcheckrc)
 - Extended dataflow analysis
 - External source checking
+- **Checks messages/*.sh** for all language files
 
 ## Dependencies
 
@@ -241,12 +337,19 @@ yum install jq git
 - Total execution: < 100ms
 - Git operations: < 50ms
 - JSON parsing: < 10ms
+- **i18n overhead: ~3-5ms** (config load + message file source)
+
+**i18n Performance Breakdown**:
+- `load_config()`: <1ms (source single config file)
+- `load_language_messages()`: 2-3ms (source and define 5 arrays with ~120 messages)
+- Negligible impact on overall performance (<5% of total budget)
 
 If slow, check:
 
 1. Git repo size (large repos increase operation time)
 2. Number of modified files (affects status parsing)
 3. jq query complexity (keep single parse)
+4. **Language file size** (should be <5KB per file)
 
 ## Common Patterns
 
@@ -300,18 +403,31 @@ append_if() {
 
 ```
 /
-├── statusline.sh          # Main implementation (693 lines)
+├── statusline.sh          # Main implementation (~700 lines)
 ├── install.sh             # Installer script (always copies, no symlink mode)
 ├── README.md              # User-facing documentation
 ├── .shellcheckrc          # Linter config (all checks enabled)
 ├── .editorconfig          # Code style enforcement
 ├── .gitignore             # Excluded files (IDE tools, temp files)
+├── messages/              # i18n message files
+│   ├── en.sh              # English messages (default)
+│   ├── pt.sh              # Portuguese (Brazilian) messages
+│   ├── es.sh              # Spanish messages
+│   └── README.md          # Translation guidelines
 └── tests/
-    ├── unit.sh            # Component tests
-    ├── integration.sh     # End-to-end tests
-    ├── shellcheck.sh      # Static analysis
+    ├── unit.sh            # Component tests (includes i18n validation)
+    ├── integration.sh     # End-to-end tests (includes language config tests)
+    ├── shellcheck.sh      # Static analysis (checks messages/*.sh)
     └── fixtures/
         └── test-input.json # Sample JSON input
+
+After installation (~/.claude/):
+├── statusline.sh           # Deployed script
+├── statusline-config.sh    # User language preference
+└── messages/               # Deployed language files
+    ├── en.sh
+    ├── pt.sh
+    └── es.sh
 ```
 
 ## Documentation

@@ -33,140 +33,54 @@ readonly STATE_NOT_REPO="not_repo"
 readonly STATE_CLEAN="clean"
 readonly STATE_DIRTY="dirty"
 
-# Context usage message tiers (for random funny messages)
-readonly CONTEXT_MSG_VERY_LOW=(
-  "just getting started"
-  "barely touched it"
-  "rookie numbers"
-  "fresh as a daisy"
-  "room for an elephant"
-  "barely scratched the surface"
-  "context? what context?"
-  "zero stress mode"
-  "could do this all day"
-  "warming up the engines"
-  "practically empty"
-  "haven't even started yet"
-  "smooth sailing ahead"
-  "testing the waters"
-  "this will go far"
-  "still cold in here"
-  "didn't break a sweat"
-  "taking it slow"
-  "plenty of runway left"
-  "all systems nominal"
-  "hardly made a dent"
-  "got room to spare"
-)
+# i18n configuration
+readonly DEFAULT_LANGUAGE="en"
+readonly CONFIG_FILE="${CONFIG_FILE:-${HOME}/.claude/statusline-config.sh}"
+readonly MESSAGES_DIR="${MESSAGES_DIR:-${HOME}/.claude/messages}"
 
-readonly CONTEXT_MSG_LOW=(
-  "ate and left no crumbs"
-  "light snacking"
-  "taking it easy"
-  "smooth operator"
-  "just vibing"
-  "cruising altitude reached"
-  "sipping not gulping"
-  "nice and steady"
-  "feeling good about this"
-  "like a walk in the park"
-  "barely breaking a sweat"
-  "coasting along nicely"
-  "comfortable cruise"
-  "nibbling around the edges"
-  "hasn't warmed up yet"
-  "too comfortable"
-  "zen mode activated"
-  "this rhythm is good"
-  "feeling just right"
-  "total tranquility"
-  "not bad so far"
-  "looking good"
-)
+# ============================================================
+# I18N FUNCTIONS
+# ============================================================
 
-readonly CONTEXT_MSG_MEDIUM=(
-  "halfway there"
-  "finding the groove"
-  "building momentum"
-  "picking up speed"
-  "getting interesting"
-  "this is where the fun begins"
-  "entering the zone"
-  "momentum is building"
-  "getting warmer"
-  "midpoint madness"
-  "balanced as all things should be"
-  "sweet spot territory"
-  "perfectly balanced"
-  "getting serious now"
-  "halfway walked"
-  "warming the turbines"
-  "started to heat up"
-  "catching rhythm"
-  "starting to feel it"
-  "can feel the weight now"
-  "neither cold nor hot"
-  "this is balanced"
-  "gears are meshing"
-)
+# Load user configuration
+# Returns: language code (e.g., "en", "pt", "es")
+load_config() {
+  local config_lang="${DEFAULT_LANGUAGE}"
 
-readonly CONTEXT_MSG_HIGH=(
-  "getting spicy"
-  "filling up fast"
-  "things are heating up"
-  "now we're talking"
-  "turning up the heat"
-  "entering danger zone"
-  "feeling the pressure"
-  "this is getting real"
-  "approaching the red zone"
-  "intensity rising"
-  "no more mr nice bot"
-  "getting toasty in here"
-  "full throttle mode"
-  "heated up for good"
-  "starting to get hot"
-  "on fire"
-  "cauldron is boiling"
-  "starting to get heavy"
-  "serious now"
-  "sweating bullets"
-  "things getting serious"
-  "here we go"
-  "warming the engine"
-  "hold on tight"
-)
+  # Source config if exists
+  if [[ -f "${CONFIG_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${CONFIG_FILE}"
+    config_lang="${STATUSLINE_LANGUAGE:-${DEFAULT_LANGUAGE}}"
+  fi
 
-readonly CONTEXT_MSG_CRITICAL=(
-  "living dangerously"
-  "pushing the limits"
-  "houston we have a problem"
-  "danger zone activated"
-  "code like there's no tomorrow"
-  "running on fumes"
-  "this is fine"
-  "spicy spicy spicy"
-  "critical mass approaching"
-  "yolo mode engaged"
-  "no safety net here"
-  "maximum overdrive"
-  "somebody stop me"
-  "pedal to the metal"
-  "context window go brrrr"
-  "on fire now"
-  "at the limit already"
-  "about to explode"
-  "now we're screwed"
-  "limit coming in hot"
-  "someone help please"
-  "going to explode"
-  "all or nothing now"
-  "hold my drink"
-  "burning up already"
-  "this will end badly"
-  "limit is here"
-  "can't take it anymore"
-)
+  echo "${config_lang}"
+}
+
+# Load language messages
+# Args: $1 = language code
+# Side effect: Sources language file, defines CONTEXT_MSG_* arrays
+load_language_messages() {
+  local lang="$1"
+  local lang_file="${MESSAGES_DIR}/${lang}.sh"
+
+  # Check if language file exists
+  if [[ ! -f "${lang_file}" ]]; then
+    # Fallback to default language
+    lang="${DEFAULT_LANGUAGE}"
+    lang_file="${MESSAGES_DIR}/${lang}.sh"
+  fi
+
+  # Source language file (defines CONTEXT_MSG_* arrays)
+  if [[ -f "${lang_file}" ]]; then
+    # shellcheck source=/dev/null
+    source "${lang_file}"
+  else
+    # Critical failure: default language missing
+    echo "Error: Language file not found: ${lang_file}" >&2
+    exit 1
+  fi
+}
 
 # ============================================================
 # UTILITY FUNCTIONS
@@ -329,6 +243,7 @@ get_context_message() {
   local tier
   tier=$(get_context_tier "${percent}")
 
+  # shellcheck disable=SC2154  # CONTEXT_MSG_* arrays sourced from language files
   case "${tier}" in
     0) messages=("${CONTEXT_MSG_VERY_LOW[@]}") ;;
     1) messages=("${CONTEXT_MSG_LOW[@]}") ;;
@@ -646,6 +561,11 @@ main() {
     echo "Error: jq required" >&2
     exit 1
   }
+
+  # Load configuration and language messages
+  local user_language
+  user_language=$(load_config)
+  load_language_messages "${user_language}"
 
   # Read input (POSIX-compatible: cat instead of < /dev/stdin)
   local input

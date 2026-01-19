@@ -60,6 +60,30 @@ cd claude-code-statusline
 
 After making changes to statusline.sh, run `./install.sh` again to update the installed version.
 
+## Language Support
+
+The statusline supports multiple languages for context usage messages.
+
+### Available Languages
+
+- 🇺🇸 **English (en)** - Default
+- 🇧🇷 **Português (pt)** - Brazilian Portuguese with cultural adaptation
+- 🇪🇸 **Español (es)** - Spanish
+
+### Change Language
+
+Run the installer again to select a different language:
+
+```bash
+./install.sh
+```
+
+The installer will prompt for language selection. Your choice persists until reinstalling.
+
+### Add a Language
+
+See [messages/README.md](messages/README.md) for translation guidelines.
+
 ## Documentation
 
 - [Official Statusline Spec](https://code.claude.com/docs/en/statusline) - Claude Code statusline documentation

@@ -13,6 +13,11 @@ sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
 source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
+# Load language messages (required for statusline.sh >= v2.0)
+# Source English messages directly for tests
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/messages/en.sh"
+
 # Colors are already defined in statusline.sh as readonly
 # RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
 # shellcheck disable=SC2154
@@ -251,6 +256,53 @@ if [[ "${found_different}" == "true" ]]; then
 else
   fail "All colors were the same in ${iterations} iterations"
 fi
+
+# ============================================================
+# LANGUAGE FILE TESTS
+# ============================================================
+
+echo ""
+echo "Testing language file loading..."
+
+# Test: Each language file defines all required arrays
+for lang in en pt es; do
+  lang_file="messages/${lang}.sh"
+
+  if [[ -f "${lang_file}" ]]; then
+    # Use bash -c to create clean environment
+    if bash -c "source ${lang_file} && \
+       [[ \${#CONTEXT_MSG_VERY_LOW[@]} -gt 0 ]] && \
+       [[ \${#CONTEXT_MSG_LOW[@]} -gt 0 ]] && \
+       [[ \${#CONTEXT_MSG_MEDIUM[@]} -gt 0 ]] && \
+       [[ \${#CONTEXT_MSG_HIGH[@]} -gt 0 ]] && \
+       [[ \${#CONTEXT_MSG_CRITICAL[@]} -gt 0 ]]"; then
+      pass "Language file valid: ${lang}"
+    else
+      fail "Language file invalid: ${lang}"
+    fi
+  else
+    fail "Language file missing: ${lang}"
+  fi
+done
+
+# Test: Array size validation (each tier should have 15-30 messages)
+for lang in en pt es; do
+  lang_file="messages/${lang}.sh"
+
+  if [[ -f "${lang_file}" ]]; then
+    # Use bash -c to create clean environment
+    if bash -c "source ${lang_file} && \
+       [[ \${#CONTEXT_MSG_VERY_LOW[@]} -ge 15 ]] && \
+       [[ \${#CONTEXT_MSG_LOW[@]} -ge 15 ]] && \
+       [[ \${#CONTEXT_MSG_MEDIUM[@]} -ge 15 ]] && \
+       [[ \${#CONTEXT_MSG_HIGH[@]} -ge 15 ]] && \
+       [[ \${#CONTEXT_MSG_CRITICAL[@]} -ge 15 ]]"; then
+      pass "Language arrays have valid sizes: ${lang}"
+    else
+      fail "Language arrays too small: ${lang}"
+    fi
+  fi
+done
 
 echo ""
 echo "========================================="

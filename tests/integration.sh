@@ -43,6 +43,10 @@ run_test() {
 
 # Main test suite
 main() {
+  # Set up test environment for i18n
+  export MESSAGES_DIR="${SCRIPT_DIR}/messages"
+  export CONFIG_FILE="/dev/null"  # No config file in tests, use default language
+
   echo -e "${YELLOW}=== Statusline Integration Tests ===${NC}"
   echo "Testing improvements to statusline.sh"
   echo ""
@@ -187,6 +191,58 @@ main() {
       "current_usage": {"input_tokens": 1000}
     },
     "cost": {"total_cost_usd": "malicious_string"}
+  }'
+
+  # Test 13-15: Language configuration tests
+  echo -e "\n${YELLOW}=== Language Configuration Tests ===${NC}"
+
+  # Test 13: Statusline works with English language config
+  temp_config=$(mktemp)
+  echo "readonly STATUSLINE_LANGUAGE=\"en\"" > "${temp_config}"
+  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: English" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 10000}
+    }
+  }'
+  rm -f "${temp_config}"
+
+  # Test 14: Statusline works with Portuguese language config
+  temp_config=$(mktemp)
+  echo "readonly STATUSLINE_LANGUAGE=\"pt\"" > "${temp_config}"
+  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Portuguese" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 10000}
+    }
+  }'
+  rm -f "${temp_config}"
+
+  # Test 15: Statusline works with Spanish language config
+  temp_config=$(mktemp)
+  echo "readonly STATUSLINE_LANGUAGE=\"es\"" > "${temp_config}"
+  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Spanish" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 10000}
+    }
+  }'
+  rm -f "${temp_config}"
+
+  # Test 16: Fallback to default language when config missing
+  CONFIG_FILE="/nonexistent/config" MESSAGES_DIR="./messages" run_test "Language fallback: Missing config" '{
+    "model": {"display_name": "Test"},
+    "workspace": {"current_dir": "."},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 10000}
+    }
   }'
 
   # Summary
