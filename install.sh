@@ -7,7 +7,10 @@ set -euo pipefail
 # Configuration
 readonly TARGET_DIR="${HOME}/.claude"
 readonly TARGET_FILE="${TARGET_DIR}/statusline.sh"
-readonly GITHUB_RAW_URL="${STATUSLINE_INSTALL_URL:-https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/statusline.sh}"
+readonly SETTINGS_FILE="${HOME}/.claude/settings.json"
+readonly SETTINGS_COMMAND="${HOME}/.claude/statusline.sh"
+readonly GITHUB_RAW_URL="https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/statusline.sh"
+readonly EXIT_PARTIAL_FAILURE=2
 
 # Temporary file for downloads (set in main)
 TEMP_FILE=""
@@ -29,9 +32,23 @@ check_bash_version() {
   return 0
 }
 
+# Generate unique timestamp for backup files
+generate_timestamp() {
+  # shellcheck disable=SC2312  # Intentional: fallback command in OR expression
+  date +%s%N 2>/dev/null || echo "$(date +%s).$$"
+}
+
+# Extract version number from command output
+extract_version() {
+  local -r cmd="$1"
+  "${cmd}" --version 2>/dev/null | grep -oE '[0-9.]+' | head -n1 || echo 'found'
+}
+
 # Check git version (2.11+)
 check_git_version() {
-  local git_version_str major minor
+  local git_version_str
+  local major
+  local minor
 
   if ! command -v git >/dev/null 2>&1; then
     return 1
@@ -44,7 +61,9 @@ check_git_version() {
   fi
 
   major=$(echo "${git_version_str}" | cut -d. -f1)
+  readonly major
   minor=$(echo "${git_version_str}" | cut -d. -f2)
+  readonly minor
 
   if [[ "${major}" -lt 2 ]] || \
      [[ "${major}" -eq 2 && "${minor}" -lt 11 ]]; then
@@ -58,18 +77,23 @@ check_git_version() {
 check_dependencies() {
   local missing=()
 
-  # Check bash version
   # shellcheck disable=SC2310  # Intentional: explicit check in conditional
   if ! check_bash_version; then
     missing+=("bash 3.2+")
   fi
 
-  # Check jq
+  if ! command -v claude >/dev/null 2>&1; then
+    missing+=("claude")
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    missing+=("curl")
+  fi
+
   if ! command -v jq >/dev/null 2>&1; then
     missing+=("jq")
   fi
 
-  # Check git version
   # shellcheck disable=SC2310  # Intentional: explicit check in conditional
   if ! check_git_version; then
     missing+=("git 2.11+")
@@ -85,32 +109,44 @@ check_dependencies() {
 
 # Show platform-specific installation instructions for missing dependencies
 show_install_instructions() {
-  local deps=("$@")
+  local -r deps=("$@")
   local platform
+  # shellcheck disable=SC2312  # Intentional: fallback command in OR expression
   platform=$(uname -s 2>/dev/null || echo "Unknown")
+  readonly platform
 
   echo "❌ Missing dependencies: ${deps[*]}"
   echo ""
 
+  for dep in "${deps[@]}"; do
+    if [[ "${dep}" == "claude" ]]; then
+      echo "Claude Code CLI:"
+      echo "  Visit https://claude.ai/code for installation instructions"
+      echo ""
+      break
+    fi
+  done
+
   case "${platform}" in
     Darwin)
       echo "Install on macOS:"
-      echo "  brew install jq git"
+      echo "  brew install curl jq git"
       ;;
     Linux)
       echo "Install on Linux:"
       if command -v apt-get >/dev/null 2>&1; then
-        echo "  sudo apt-get install jq git"
+        echo "  sudo apt-get install curl jq git"
       elif command -v yum >/dev/null 2>&1; then
-        echo "  sudo yum install jq git"
+        echo "  sudo yum install curl jq git"
       elif command -v dnf >/dev/null 2>&1; then
-        echo "  sudo dnf install jq git"
+        echo "  sudo dnf install curl jq git"
       else
-        echo "  Use your package manager to install: jq git"
+        echo "  Use your package manager to install: curl jq git"
       fi
       ;;
     *)
       echo "Please install the following dependencies:"
+      echo "  - curl"
       echo "  - jq 1.5+"
       echo "  - git 2.11+"
       echo "  - bash 3.2+"
@@ -121,23 +157,18 @@ show_install_instructions() {
   echo "Installation aborted. Install dependencies and try again."
 }
 
-# Download file with curl/wget fallback
+# Download file with curl
 download_file() {
-  local url="$1"
-  local dest="$2"
+  local -r url="$1"
+  local -r dest="$2"
 
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "${url}" -o "${dest}" 2>/dev/null
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "${dest}" "${url}" 2>/dev/null
-  else
-    echo "Error: curl or wget required for remote installation"
+  curl -fsSL "${url}" -o "${dest}" 2>/dev/null || {
+    echo "Error: Failed to download from ${url}"
     return 1
-  fi
+  }
 
-  # Validate download succeeded and file is not empty
   if [[ ! -s "${dest}" ]]; then
-    echo "Error: Download failed or file is empty"
+    echo "Error: Downloaded file is empty"
     return 1
   fi
 
@@ -146,21 +177,18 @@ download_file() {
 
 # Validate downloaded file
 validate_file() {
-  local file="$1"
+  local -r file="$1"
 
-  # Check file exists and not empty
   if [[ ! -s "${file}" ]]; then
     echo "Error: File does not exist or is empty"
     return 1
   fi
 
-  # Check contains bash shebang
   if ! head -n1 "${file}" 2>/dev/null | grep -q '^#!/.*bash'; then
     echo "Error: Invalid file format (missing bash shebang)"
     return 1
   fi
 
-  # Sanity check for expected content
   if ! grep -q 'assemble_statusline' "${file}" 2>/dev/null; then
     echo "Error: File does not appear to be statusline.sh"
     return 1
@@ -171,10 +199,9 @@ validate_file() {
 
 # Perform atomic installation
 install_statusline() {
-  local source="$1"
+  local -r source="$1"
   local backup=""
 
-  # Create ~/.claude if missing
   if [[ ! -d "${TARGET_DIR}" ]]; then
     mkdir -p "${TARGET_DIR}" || {
       echo "Error: Failed to create ${TARGET_DIR}"
@@ -182,9 +209,13 @@ install_statusline() {
     }
   fi
 
-  # Backup existing installation
+  if [[ -L "${TARGET_DIR}" ]]; then
+    echo "Error: ${TARGET_DIR} is a symbolic link (security risk)"
+    return 1
+  fi
+
   if [[ -e "${TARGET_FILE}" ]] || [[ -L "${TARGET_FILE}" ]]; then
-    backup="${TARGET_FILE}.backup.$(date +%s)"
+    backup="${TARGET_FILE}.backup.$(generate_timestamp)"
     mv "${TARGET_FILE}" "${backup}" || {
       echo "Error: Failed to backup existing installation"
       return 1
@@ -192,14 +223,12 @@ install_statusline() {
     echo "Backed up existing: ${backup}"
   fi
 
-  # Copy file to target
   cp "${source}" "${TARGET_FILE}" || {
     echo "Error: Failed to copy file"
     [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
     return 1
   }
 
-  # Make executable
   chmod +x "${TARGET_FILE}" || {
     echo "Error: Failed to make file executable"
     [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
@@ -209,24 +238,87 @@ install_statusline() {
   return 0
 }
 
+# Configure settings.json with statusLine configuration
+configure_settings() {
+  local -r settings_dir="${HOME}/.claude"
+  local temp_file
+  local backup_file
+
+  mkdir -p "${settings_dir}" || {
+    echo "Error: Cannot create ${settings_dir}"
+    return 1
+  }
+
+  if [[ ! -f "${SETTINGS_FILE}" ]]; then
+    echo "{}" > "${SETTINGS_FILE}" || {
+      echo "Error: Cannot create ${SETTINGS_FILE}"
+      return 1
+    }
+    echo "Created new settings.json"
+  fi
+
+  if ! jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+    echo "Error: Existing settings.json contains invalid JSON"
+    echo "Please fix ${SETTINGS_FILE} manually"
+    return 1
+  fi
+
+  backup_file="${SETTINGS_FILE}.backup.$(generate_timestamp)"
+  cp "${SETTINGS_FILE}" "${backup_file}" || {
+    echo "Error: Failed to backup settings.json"
+    return 1
+  }
+  echo "Backed up settings: ${backup_file}"
+
+  temp_file=$(mktemp) || {
+    echo "Error: Cannot create temporary file"
+    return 1
+  }
+
+  jq --arg cmd "${SETTINGS_COMMAND}" '.statusLine = {
+    "type": "command",
+    "command": $cmd,
+    "padding": 0
+  }' "${SETTINGS_FILE}" > "${temp_file}" 2>/dev/null || {
+    echo "Error: Failed to update configuration"
+    rm -f "${temp_file}"
+    return 1
+  }
+
+  if ! jq empty "${temp_file}" 2>/dev/null; then
+    echo "Error: Generated invalid JSON"
+    rm -f "${temp_file}"
+    return 1
+  fi
+
+  mv "${temp_file}" "${SETTINGS_FILE}" || {
+    echo "Error: Failed to write settings.json"
+    mv "${backup_file}" "${SETTINGS_FILE}"
+    rm -f "${temp_file}"
+    return 1
+  }
+
+  echo "✅ Configured ~/.claude/settings.json"
+  return 0
+}
+
 # Display success message with next steps
 show_success_message() {
+  local -r mode="$1"
   echo ""
-  echo "✅ statusline.sh installed to ${TARGET_FILE}"
+  echo "================================================"
+  echo "✅ Installation complete!"
+  echo "================================================"
+  echo ""
+  echo "Installed: ${TARGET_FILE}"
+  echo "Mode: ${mode}"
+  echo ""
+  echo "Configuration applied to ~/.claude/settings.json"
+  echo ""
+  echo "Next step:"
+  echo "  Restart Claude Code to see your new statusline"
   echo ""
   echo "To update, run the installation command again."
-  echo ""
-  echo "Next steps:"
-  echo "1. Add to ~/.claude/settings.json:"
-  echo '   {'
-  echo '     "statusLine": {'
-  echo '       "type": "command",'
-  echo '       "command": "~/.claude/statusline.sh",'
-  echo '       "padding": 0'
-  echo '     }'
-  echo '   }'
-  echo ""
-  echo "2. Restart Claude Code to apply changes"
   echo ""
 }
 
@@ -234,50 +326,74 @@ show_success_message() {
 main() {
   local source_file
 
-  # Set up cleanup trap
   trap cleanup_on_error ERR INT TERM
 
   echo "Installing statusline.sh..."
   echo ""
 
-  # Check dependencies first
   echo "Checking dependencies..."
   # shellcheck disable=SC2310  # Intentional: explicit check with exit
   check_dependencies || exit 1
 
-  echo "✅ bash ${BASH_VERSION} found"
+  echo "✅ bash ${BASH_VERSION}"
   # shellcheck disable=SC2312  # Intentional: display version, errors not critical
-  echo "✅ jq $(jq --version 2>/dev/null | grep -oE '[0-9.]+' || echo 'found')"
+  echo "✅ curl $(extract_version curl)"
   # shellcheck disable=SC2312  # Intentional: display version, errors not critical
-  echo "✅ git $(git --version 2>/dev/null | grep -oE '[0-9.]+' | head -n1)"
+  echo "✅ claude $(extract_version claude)"
+  # shellcheck disable=SC2312  # Intentional: display version, errors not critical
+  echo "✅ jq $(extract_version jq)"
+  # shellcheck disable=SC2312  # Intentional: display version, errors not critical
+  echo "✅ git $(extract_version git)"
   echo ""
 
-  # Always download from GitHub
-  echo "Downloading from GitHub..."
+  if [[ -f "./statusline.sh" ]]; then
+    local install_mode="local"
+    echo "Using local statusline.sh from current directory..."
 
-  # Create temp file for download
-  TEMP_FILE=$(mktemp "${TMPDIR:-/tmp}/statusline.XXXXXX") || {
-    echo "Error: Failed to create temporary file"
-    exit 1
-  }
+    # Verify we're in a safe directory (not root, not /tmp)
+    # shellcheck disable=SC2312  # Intentional: pwd unlikely to fail, comparison still works if empty
+    if [[ "$(pwd)" == "/" ]] || [[ "$(pwd)" == "/tmp" ]] || [[ "$(pwd)" == "${TMPDIR:-/tmp}" ]]; then
+      # shellcheck disable=SC2312  # Intentional: pwd for error message
+      echo "Error: Refusing to install from unsafe directory: $(pwd)"
+      cleanup_on_error
+    fi
 
-  # Download and validate
-  # shellcheck disable=SC2310  # Intentional: explicit error handling
-  if ! download_file "${GITHUB_RAW_URL}" "${TEMP_FILE}"; then
-    cleanup_on_error
+    source_file=$(realpath "./statusline.sh" 2>/dev/null) || {
+      echo "Error: Cannot resolve path to ./statusline.sh"
+      cleanup_on_error
+    }
+
+    # shellcheck disable=SC2310  # Intentional: explicit error handling
+    if ! validate_file "${source_file}"; then
+      echo "Error: Local statusline.sh failed validation"
+      cleanup_on_error
+    fi
+
+    echo "✅ Local file validated"
+  else
+    local install_mode="remote"
+    echo "Downloading from GitHub..."
+
+    TEMP_FILE=$(mktemp -t statusline.XXXXXX) || {
+      echo "Error: Failed to create temporary file"
+      exit 1
+    }
+
+    # shellcheck disable=SC2310  # Intentional: explicit error handling
+    if ! download_file "${GITHUB_RAW_URL}" "${TEMP_FILE}"; then
+      cleanup_on_error
+    fi
+
+    echo "✅ Downloaded successfully"
+
+    source_file="${TEMP_FILE}"
+
+    # shellcheck disable=SC2310  # Intentional: explicit error handling
+    if ! validate_file "${source_file}"; then
+      cleanup_on_error
+    fi
   fi
 
-  echo "✅ Downloaded successfully"
-
-  source_file="${TEMP_FILE}"
-
-  # Validate file
-  # shellcheck disable=SC2310  # Intentional: explicit error handling
-  if ! validate_file "${source_file}"; then
-    cleanup_on_error
-  fi
-
-  # Install
   echo ""
   echo "Installing to ${TARGET_FILE}..."
   # shellcheck disable=SC2310  # Intentional: explicit error handling
@@ -285,11 +401,28 @@ main() {
     cleanup_on_error
   fi
 
-  # Cleanup temp file
+  echo ""
+  echo "Configuring Claude Code settings..."
+  # shellcheck disable=SC2310  # Intentional: explicit error handling
+  if ! configure_settings; then
+    echo ""
+    echo "⚠️  Installation succeeded, but automatic configuration failed."
+    echo "Please manually add to ~/.claude/settings.json:"
+    echo '   {'
+    echo '     "statusLine": {'
+    echo '       "type": "command",'
+    echo "       \"command\": \"${SETTINGS_COMMAND}\","
+    echo '       "padding": 0'
+    echo '     }'
+    echo '   }'
+    echo ""
+    # Exit code 2: Installation succeeded but configuration failed
+    exit "${EXIT_PARTIAL_FAILURE}"
+  fi
+
   [[ -n "${TEMP_FILE}" ]] && [[ -f "${TEMP_FILE}" ]] && rm -f "${TEMP_FILE}"
 
-  # Show success message
-  show_success_message
+  show_success_message "${install_mode}"
 
   exit 0
 }

@@ -14,9 +14,9 @@ source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
 # Colors are already defined in statusline.sh as readonly
-# RED, GREEN, NC are available from sourced file
+# RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
 # shellcheck disable=SC2154
-: "${RED:?}" "${GREEN:?}" "${NC:?}"
+: "${RED:?}" "${GREEN:?}" "${NC:?}" "${CYAN:?}" "${BLUE:?}" "${MAGENTA:?}" "${ORANGE:?}"
 
 passed=0
 failed=0
@@ -172,7 +172,7 @@ test "validate_directory path with dot (safe)" "pass" "${result}"
 echo ""
 echo "Testing build_model_component()..."
 result=$(build_model_component "claude-3-opus" | sed -E 's/\\033\[[0-9;]*m//g')
-expected="⚙️ claude-3-opus"
+expected="🤖 claude-3-opus"
 test "build_model_component" "${expected}" "${result}"
 
 # Test build_cost_component() with security validation
@@ -192,15 +192,65 @@ test "build_cost_component non-numeric (should be empty)" "" "${result}"
 echo ""
 echo "Testing build_files_component()..."
 result=$(build_files_component "5" | sed -E 's/\\033\[[0-9;]*m//g')
-expected="5 files"
+expected="✏️ changes"
 test "build_files_component 5 files" "${expected}" "${result}"
 result=$(build_files_component "1" | sed -E 's/\\033\[[0-9;]*m//g')
-expected="1 files"
+expected="✏️ changes"
 test "build_files_component 1 file" "${expected}" "${result}"
 result=$(build_files_component "0")
 test "build_files_component 0 files (should be empty)" "" "${result}"
 result=$(build_files_component "")
 test "build_files_component empty (should be empty)" "" "${result}"
+
+# Test get_random_message_color()
+echo ""
+echo "Testing get_random_message_color()..."
+
+# Helper functions for pass/fail
+pass() {
+  echo -e "${GREEN}✓${NC} $1"
+  passed=$((passed + 1))
+}
+
+fail() {
+  echo -e "${RED}✗${NC} $1"
+  failed=$((failed + 1))
+}
+
+# Test that get_random_message_color returns a valid color
+color=$(get_random_message_color)
+
+# Verify it's one of the 5 valid colors
+valid=false
+for expected in "${GREEN}" "${CYAN}" "${BLUE}" "${MAGENTA}" "${ORANGE}"; do
+  [[ "${color}" == "${expected}" ]] && valid=true && break
+done
+
+if [[ "${valid}" == "true" ]]; then
+  pass "get_random_message_color returns valid color"
+else
+  fail "get_random_message_color returned invalid color: ${color}"
+fi
+
+# Test that colors vary across multiple calls (Bash 3.2 compatible)
+# Collect first 10 colors and check if at least 2 are different
+iterations=20
+first_color=$(get_random_message_color)
+found_different=false
+
+for (( i=1; i<iterations; i++ )); do
+  color=$(get_random_message_color)
+  if [[ "${color}" != "${first_color}" ]]; then
+    found_different=true
+    break
+  fi
+done
+
+if [[ "${found_different}" == "true" ]]; then
+  pass "Colors vary across multiple calls"
+else
+  fail "All colors were the same in ${iterations} iterations"
+fi
 
 echo ""
 echo "========================================="

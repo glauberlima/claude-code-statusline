@@ -22,10 +22,11 @@ readonly SEPARATOR="${GRAY}|${NC}"
 readonly NULL_VALUE="null"
 
 # Icons
-readonly MODEL_ICON="⚙️"
+readonly MODEL_ICON="🤖"
 readonly CONTEXT_ICON="📊"
 readonly DIR_ICON="📁"
 readonly GIT_ICON="🌿"
+readonly CHANGE_ICON="✏️"
 
 # Git state constants
 readonly STATE_NOT_REPO="not_repo"
@@ -185,7 +186,7 @@ append_if() {
 }
 
 # Validate directory path for security
-# Rejects absolute paths, path traversal (..), and suspicious patterns
+# Rejects path traversal (..), tilde expansion (~), and shell metacharacters
 validate_directory() {
   local dir="$1"
 
@@ -194,6 +195,9 @@ validate_directory() {
 
   # Reject paths starting with ~
   [[ "${dir}" =~ ^~ ]] && return 1
+
+  # Reject shell metacharacters
+  [[ "${dir}" =~ [\$\`\;] ]] && return 1
 
   return 0
 }
@@ -230,32 +234,20 @@ format_number() {
   fi
 }
 
-# Check git version for porcelain v2 support (requires git 2.11+)
-# Cache result for performance
-check_git_version() {
-  # Return cached result if available
-  [[ -n "${GIT_VERSION_CHECKED:-}" ]] && return "${GIT_VERSION_OK:-1}"
+# Returns a random ANSI color code for context messages
+# Uses modulo to select from predefined color pool (5 colors)
+# Returns: ANSI color escape sequence
+get_random_message_color() {
+  local -a colors=(
+    "${GREEN}"
+    "${CYAN}"
+    "${BLUE}"
+    "${MAGENTA}"
+    "${ORANGE}"
+  )
 
-  GIT_VERSION_CHECKED=1
-  command -v git >/dev/null 2>&1 || { GIT_VERSION_OK=1; return 1; }
-
-  local version
-  version=$(git --version 2>/dev/null | awk '{print $3}')
-  [[ -z "${version}" ]] && { GIT_VERSION_OK=1; return 1; }
-
-  # Semantic version comparison: >= 2.11
-  local major minor
-  IFS='.' read -r major minor _ << EOF
-${version}
-EOF
-
-  if [[ "${major}" -gt 2 ]] || { [[ "${major}" -eq 2 ]] && [[ "${minor}" -ge 11 ]]; }; then
-    GIT_VERSION_OK=0
-    return 0
-  else
-    GIT_VERSION_OK=1
-    return 1
-  fi
+  local index=$(( RANDOM % ${#colors[@]} ))
+  echo "${colors[index]}"
 }
 
 # ============================================================
@@ -293,9 +285,7 @@ parse_claude_input() {
       (.context_window.current_usage.cache_creation_input_tokens // 0) +
       (.context_window.current_usage.cache_read_input_tokens // 0)
     ),
-    (.cost.total_cost_usd // 0),
-    (.cost.total_lines_added // 0),
-    (.cost.total_lines_removed // 0)
+    (.cost.total_cost_usd // 0)
   ' 2>/dev/null) || {
     echo "Error: Failed to parse JSON input" >&2
     return 1
@@ -428,13 +418,7 @@ EOF
     return 0
   fi
 
-  # Get line changes (single diff HEAD call replaces 2 separate cached + unstaged calls)
-  local added removed
-  read -r added removed << EOF
-$(git "${git_opts[@]}" diff HEAD --numstat 2>/dev/null | awk '{a+=$1; r+=$2} END {print a+0, r+0}' || true)
-EOF
-
-  echo "${STATE_DIRTY}|${branch}|${total_files}|${added}|${removed}|${ahead}|${behind}"
+  echo "${STATE_DIRTY}|${branch}|${total_files}|${ahead}|${behind}"
 }
 
 # ============================================================
@@ -469,7 +453,7 @@ format_git_clean() {
 }
 
 format_git_dirty() {
-  local branch="$1" files="$2" added="$3" removed="$4" ahead="$5" behind="$6"
+  local branch="$1" files="$2" ahead="$3" behind="$4"
 
   # Simple branch + ahead/behind (no file count, no line changes)
   local output="${MAGENTA}${branch}${NC}"
@@ -508,12 +492,12 @@ EOF
       echo "${clean_msg}|"
       ;;
     "${STATE_DIRTY}")
-      local branch files added removed ahead behind
-      IFS='|' read -r _ branch files added removed ahead behind << EOF
+      local branch files ahead behind
+      IFS='|' read -r _ branch files ahead behind << EOF
 ${git_data}
 EOF
       # Already returns "git_output|file_count"
-      format_git_dirty "${branch}" "${files}" "${added}" "${removed}" "${ahead}" "${behind}"
+      format_git_dirty "${branch}" "${files}" "${ahead}" "${behind}"
       ;;
     *)
       # Unknown state - show error
@@ -537,7 +521,7 @@ build_context_component() {
 
   local context_percent=0
   if [[ "${current_usage}" != "0" && "${context_size}" -gt 0 ]]; then
-    context_percent=$((current_usage * 100 / context_size))
+    context_percent=$((current_usage / (context_size / 100)))
   fi
 
   # Get colored progress bar
@@ -554,8 +538,12 @@ build_context_component() {
   local message
   message=$(get_context_message "${context_percent}")
 
+  # Get random color for message
+  local msg_color
+  msg_color=$(get_random_message_color)
+
   # Output with brackets, colored bar, formatted numbers, and message
-  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted} ${GRAY}|${NC} ${GRAY}${message}${NC}"
+  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted} ${GRAY}|${NC} ${msg_color}${message}${NC}"
 }
 
 build_directory_component() {
@@ -590,9 +578,9 @@ EOF
 
   # Return git info and file count separately: "git_display|file_count"
   if [[ "${state}" = "${STATE_NOT_REPO}" ]]; then
-    echo "${git_line}|"
+    echo "${git_line#* }|"
   else
-    echo " ${GIT_ICON}${git_line}|${file_line}"
+    echo "${GIT_ICON} ${git_line#* }|${file_line}"
   fi
 }
 
@@ -601,7 +589,7 @@ build_files_component() {
 
   # Only show if there are modified files
   if [[ -n "${file_count}" && "${file_count}" != "0" ]]; then
-    echo "${GRAY}${file_count} files${NC}"
+    echo "${CHANGE_ICON} ${ORANGE}changes${NC}"
   fi
 }
 
@@ -614,17 +602,6 @@ build_cost_component() {
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
       echo "💰 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
     fi
-  fi
-}
-
-build_lines_component() {
-  local lines_added="$1"
-  local lines_removed="$2"
-
-  if [[ -n "${lines_added}" && -n "${lines_removed}" ]] && \
-     [[ "${lines_added}" != "0" || "${lines_removed}" != "0" ]] && \
-     [[ "${lines_added}" != "${NULL_VALUE}" && "${lines_removed}" != "${NULL_VALUE}" ]]; then
-    echo "📝 ${GREEN}+${lines_added}${NC}/${RED}-${lines_removed}${NC}"
   fi
 }
 
@@ -644,11 +621,16 @@ assemble_statusline() {
   local output separator
   separator=$(sep)
 
-  # New order: model | context | dir | git | files | cost
-  output="${model_part}${separator}${context_part}${separator}${dir_part}${separator}${git_part}"
+  # New order: dir | git | files | model | context | cost
+  output="${dir_part}${separator}${git_part}"
 
   # Add optional components
   [[ -n "${files_part}" ]] && output+="${separator}${files_part}"
+
+  # Add model and context
+  output+="${separator}${model_part}${separator}${context_part}"
+
+  # Add cost if present
   [[ -n "${cost_part}" ]] && output+="${separator}${cost_part}"
 
   echo -e "${output}"
@@ -680,15 +662,13 @@ main() {
   fi
 
   # Extract fields
-  local model_name current_dir context_size current_usage cost_usd lines_added lines_removed
+  local model_name current_dir context_size current_usage cost_usd
   {
     read -r model_name
     read -r current_dir
     read -r context_size
     read -r current_usage
     read -r cost_usd
-    read -r lines_added
-    read -r lines_removed
   } << EOF
 ${parsed}
 EOF
