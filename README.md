@@ -5,10 +5,8 @@
 ![Claude Code Statusline Demo](statusline-demo.png)
 
 <p align="center">
-
 [![Platform Support](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20MinGW-blue)](#platform-support)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
 </p>
 
 ## Features
