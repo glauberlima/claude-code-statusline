@@ -567,6 +567,17 @@ main() {
   user_language=$(load_config)
   load_language_messages "${user_language}"
 
+  # Check if stdin is a TTY (not piped input)
+  if [[ -t 0 ]]; then
+    echo "Error: statusline.sh expects JSON input via stdin" >&2
+    echo ""
+    echo "Usage: cat test-input.json | ./statusline.sh" >&2
+    echo "  Or: ./tests/unit.sh ./statusline.sh" >&2
+    echo "  Or: ./tests/integration.sh ./statusline.sh" >&2
+    echo "  Or: ./tests/shellcheck.sh ./statusline.sh" >&2
+    exit 1
+  fi
+
   # Read input (POSIX-compatible: cat instead of < /dev/stdin)
   local input
   input=$(cat) || {

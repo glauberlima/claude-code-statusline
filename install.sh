@@ -9,7 +9,8 @@ readonly TARGET_DIR="${HOME}/.claude"
 readonly TARGET_FILE="${TARGET_DIR}/statusline.sh"
 readonly SETTINGS_FILE="${HOME}/.claude/settings.json"
 readonly SETTINGS_COMMAND="${HOME}/.claude/statusline.sh"
-readonly GITHUB_RAW_URL="https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/statusline.sh"
+readonly GITHUB_BASE_URL="https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main"
+readonly GITHUB_RAW_URL="${GITHUB_BASE_URL}/statusline.sh"
 readonly EXIT_PARTIAL_FAILURE=2
 
 # Temporary file for downloads (set in main)
@@ -329,6 +330,74 @@ install_language_files() {
   return 0
 }
 
+# Download language files from GitHub for remote installation
+# Returns: 0 on success, 1 on failure
+download_language_files_remote() {
+  local messages_target_dir="${TARGET_DIR}/messages"
+  local available_languages=("en" "pt" "es")
+  local failed=0
+  local temp_file
+
+  mkdir -p "${messages_target_dir}" || {
+    echo "Error: Failed to create messages directory"
+    return 1
+  }
+
+  for lang in "${available_languages[@]}"; do
+    local lang_url="${GITHUB_BASE_URL}/messages/${lang}.sh"
+    local lang_file="${messages_target_dir}/${lang}.sh"
+
+    temp_file=$(mktemp -t "lang_${lang}.XXXXXX") || {
+      echo "Warning: Failed to create temp file for ${lang}.sh"
+      failed=1
+      continue
+    }
+
+    if ! curl -fsSL "${lang_url}" -o "${temp_file}" 2>/dev/null; then
+      echo "Warning: Failed to download ${lang}.sh"
+      rm -f "${temp_file}"
+      failed=1
+      continue
+    fi
+
+    # Validate downloaded file (non-empty and bash shebang)
+    if [[ ! -s "${temp_file}" ]]; then
+      echo "Warning: Downloaded ${lang}.sh is empty"
+      rm -f "${temp_file}"
+      failed=1
+      continue
+    fi
+
+    if ! head -n1 "${temp_file}" 2>/dev/null | grep -q '^#!/.*bash'; then
+      echo "Warning: ${lang}.sh has invalid format"
+      rm -f "${temp_file}"
+      failed=1
+      continue
+    fi
+
+    mv "${temp_file}" "${lang_file}" || {
+      echo "Warning: Failed to install ${lang}.sh"
+      rm -f "${temp_file}"
+      failed=1
+      continue
+    }
+  done
+
+  # Check if at least English (default) was installed
+  if [[ ! -f "${messages_target_dir}/en.sh" ]]; then
+    echo "Error: Failed to install default language file (en.sh)"
+    return 1
+  fi
+
+  if [[ "${failed}" -eq 0 ]]; then
+    echo "✅ Language files installed"
+  else
+    echo "✅ Language files installed (some files skipped)"
+  fi
+
+  return 0
+}
+
 # Prompt for language selection
 # Returns: language code (e.g., "en", "pt", "es")
 prompt_language_selection() {
@@ -345,7 +414,9 @@ prompt_language_selection() {
   done
 
   echo "" >&2
-  read -r -p "Enter selection [1]: " selection
+  # Read from /dev/tty to support curl | bash execution
+  printf "Enter selection [1]: " >&2
+  read -r selection < /dev/tty || selection=""
   selection="${selection:-1}"
 
   # Validate selection
@@ -509,12 +580,16 @@ main() {
       echo "Statusline will use default language (English)"
     fi
   else
-    echo "⚠️  Warning: Language files not available in remote installation"
-    echo "Statusline will use default language (English)"
+    # shellcheck disable=SC2310  # Intentional: explicit error handling
+    if ! download_language_files_remote; then
+      echo ""
+      echo "⚠️  Warning: Language files download failed"
+      echo "Statusline will use default language (English)"
+    fi
   fi
 
   # Prompt for language selection and save configuration
-  if [[ "${install_mode}" == "local" ]] && [[ -d "./messages" ]]; then
+  if [[ -d "${TARGET_DIR}/messages" ]]; then
     local selected_language
     selected_language=$(prompt_language_selection)
 
