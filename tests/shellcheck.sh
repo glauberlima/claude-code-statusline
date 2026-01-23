@@ -30,7 +30,7 @@ FILES=(
 
 for file in "${FILES[@]}"; do
   filename=$(basename "${file}")
-  if shellcheck --rcfile="${SCRIPT_DIR}/.shellcheckrc" "${file}"; then
+  if shellcheck "${file}"; then
     echo -e "${GREEN}✓${NC} ${filename}"
   else
     echo -e "${RED}✗${NC} ${filename}"

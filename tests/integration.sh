@@ -22,7 +22,7 @@ run_test() {
   local test_name="$1"
   local json_input="$2"
 
-  ((TOTAL++))
+  TOTAL=$((TOTAL + 1))
 
   local output
   local exit_code=0
@@ -30,15 +30,15 @@ run_test() {
 
   if [[ ${exit_code} -eq 0 ]]; then
     echo -e "${GREEN}✓${NC} ${test_name}"
-    ((PASSED++))
-    return 0
+    PASSED=$((PASSED + 1))
   else
     echo -e "${RED}✗${NC} ${test_name}"
     echo "  Exit code: ${exit_code}"
     echo "  Output: ${output}"
-    ((FAILED++))
-    return 1
+    FAILED=$((FAILED + 1))
   fi
+
+  return 0  # Always return 0 to prevent set -e from exiting script early
 }
 
 # Main test suite
@@ -199,7 +199,7 @@ main() {
   # Test 13: Statusline works with English language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"en\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: English" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: English" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -212,7 +212,7 @@ main() {
   # Test 14: Statusline works with Portuguese language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"pt\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Portuguese" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: Portuguese" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -225,7 +225,7 @@ main() {
   # Test 15: Statusline works with Spanish language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"es\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Spanish" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: Spanish" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -236,7 +236,7 @@ main() {
   rm -f "${temp_config}"
 
   # Test 16: Fallback to default language when config missing
-  CONFIG_FILE="/nonexistent/config" MESSAGES_DIR="./messages" run_test "Language fallback: Missing config" '{
+  CONFIG_FILE="/nonexistent/config" MESSAGES_DIR="${SCRIPT_DIR}/messages" run_test "Language fallback: Missing config" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
