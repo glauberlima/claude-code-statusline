@@ -31,14 +31,14 @@ run_test() {
   if [[ ${exit_code} -eq 0 ]]; then
     echo -e "${GREEN}✓${NC} ${test_name}"
     ((PASSED++))
-    return 0
   else
     echo -e "${RED}✗${NC} ${test_name}"
     echo "  Exit code: ${exit_code}"
     echo "  Output: ${output}"
     ((FAILED++))
-    return 1
   fi
+
+  return 0  # Always return 0 to prevent set -e from exiting script early
 }
 
 # Main test suite
