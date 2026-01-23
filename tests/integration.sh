@@ -22,7 +22,7 @@ run_test() {
   local test_name="$1"
   local json_input="$2"
 
-  ((TOTAL++))
+  TOTAL=$((TOTAL + 1))
 
   local output
   local exit_code=0
@@ -30,12 +30,12 @@ run_test() {
 
   if [[ ${exit_code} -eq 0 ]]; then
     echo -e "${GREEN}✓${NC} ${test_name}"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
   else
     echo -e "${RED}✗${NC} ${test_name}"
     echo "  Exit code: ${exit_code}"
     echo "  Output: ${output}"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
   fi
 
   return 0  # Always return 0 to prevent set -e from exiting script early
@@ -49,18 +49,6 @@ main() {
 
   echo -e "${YELLOW}=== Statusline Integration Tests ===${NC}"
   echo "Testing improvements to statusline.sh"
-  echo "DEBUG: SCRIPT_DIR=${SCRIPT_DIR}"
-  echo "DEBUG: MESSAGES_DIR=${MESSAGES_DIR}"
-  if [[ -f "${SCRIPT_DIR}/statusline.sh" ]]; then
-    echo "DEBUG: statusline.sh found"
-  else
-    echo "DEBUG: statusline.sh NOT FOUND"
-  fi
-  if [[ -d "${MESSAGES_DIR}" ]]; then
-    echo "DEBUG: messages dir found"
-  else
-    echo "DEBUG: messages dir NOT FOUND"
-  fi
   echo ""
 
   # Test 1: Normal usage
