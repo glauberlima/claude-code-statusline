@@ -49,6 +49,18 @@ main() {
 
   echo -e "${YELLOW}=== Statusline Integration Tests ===${NC}"
   echo "Testing improvements to statusline.sh"
+  echo "DEBUG: SCRIPT_DIR=${SCRIPT_DIR}"
+  echo "DEBUG: MESSAGES_DIR=${MESSAGES_DIR}"
+  if [[ -f "${SCRIPT_DIR}/statusline.sh" ]]; then
+    echo "DEBUG: statusline.sh found"
+  else
+    echo "DEBUG: statusline.sh NOT FOUND"
+  fi
+  if [[ -d "${MESSAGES_DIR}" ]]; then
+    echo "DEBUG: messages dir found"
+  else
+    echo "DEBUG: messages dir NOT FOUND"
+  fi
   echo ""
 
   # Test 1: Normal usage
