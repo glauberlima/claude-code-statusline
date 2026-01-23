@@ -199,7 +199,7 @@ main() {
   # Test 13: Statusline works with English language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"en\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: English" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: English" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -212,7 +212,7 @@ main() {
   # Test 14: Statusline works with Portuguese language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"pt\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Portuguese" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: Portuguese" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -225,7 +225,7 @@ main() {
   # Test 15: Statusline works with Spanish language config
   temp_config=$(mktemp)
   echo "readonly STATUSLINE_LANGUAGE=\"es\"" > "${temp_config}"
-  MESSAGES_DIR="./messages" CONFIG_FILE="${temp_config}" run_test "Language config: Spanish" '{
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Language config: Spanish" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
@@ -236,7 +236,7 @@ main() {
   rm -f "${temp_config}"
 
   # Test 16: Fallback to default language when config missing
-  CONFIG_FILE="/nonexistent/config" MESSAGES_DIR="./messages" run_test "Language fallback: Missing config" '{
+  CONFIG_FILE="/nonexistent/config" MESSAGES_DIR="${SCRIPT_DIR}/messages" run_test "Language fallback: Missing config" '{
     "model": {"display_name": "Test"},
     "workspace": {"current_dir": "."},
     "context_window": {
