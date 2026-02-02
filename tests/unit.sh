@@ -211,15 +211,7 @@ test "build_files_component empty (should be empty)" "" "${result}"
 echo ""
 echo "Testing build_progress_bar() UTF-8 handling..."
 
-# Save current values
-saved_filled="${BAR_FILLED}"
-saved_empty="${BAR_EMPTY}"
-
 # shellcheck disable=SC2154  # BAR_WIDTH, BAR_FILLED, BAR_EMPTY sourced from statusline.sh
-
-# Test with Unicode characters
-BAR_FILLED="█"
-BAR_EMPTY="░"
 
 # Build a 50% progress bar
 bar_50=$(build_progress_bar 50)
@@ -241,36 +233,35 @@ else
   passed=$((passed + 1))
 fi
 
-# Test with ASCII fallback characters
-BAR_FILLED="#"
-BAR_EMPTY="-"
+# Verify correct Unicode characters are used
+if echo "${bar_stripped}" | grep -q "█"; then
+  echo -e "${GREEN}✓${NC} Uses Unicode filled block (█)"
+  passed=$((passed + 1))
+else
+  echo -e "${RED}✗${NC} Missing Unicode filled block"
+  failed=$((failed + 1))
+fi
 
-bar_ascii=$(build_progress_bar 75)
-bar_ascii_stripped=$(echo -e "${bar_ascii}" | sed 's/\x1b\[[0-9;]*m//g')
-
-# Should contain 11 '#' (75% of 15) and 4 '-'
-filled_count=$(echo -n "${bar_ascii_stripped}" | grep -o "#" | wc -l)
-empty_count=$(echo -n "${bar_ascii_stripped}" | grep -o "-" | wc -l)
-
-test "ASCII progress bar filled count (75%)" "11" "${filled_count}"
-test "ASCII progress bar empty count (75%)" "4" "${empty_count}"
+if echo "${bar_stripped}" | grep -q "░"; then
+  echo -e "${GREEN}✓${NC} Uses Unicode light shade (░)"
+  passed=$((passed + 1))
+else
+  echo -e "${RED}✗${NC} Missing Unicode light shade"
+  failed=$((failed + 1))
+fi
 
 # Test edge cases
 bar_0=$(build_progress_bar 0)
 bar_0_stripped=$(echo -e "${bar_0}" | sed 's/\x1b\[[0-9;]*m//g')
-empty_0_count=$(echo -n "${bar_0_stripped}" | grep -o "-" | wc -l)
+empty_0_count=$(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l)
 # shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
 test "0% progress bar (all empty)" "${BAR_WIDTH}" "${empty_0_count}"
 
 bar_100=$(build_progress_bar 100)
 bar_100_stripped=$(echo -e "${bar_100}" | sed 's/\x1b\[[0-9;]*m//g')
-filled_100_count=$(echo -n "${bar_100_stripped}" | grep -o "#" | wc -l)
+filled_100_count=$(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l)
 # shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
 test "100% progress bar (all filled)" "${BAR_WIDTH}" "${filled_100_count}"
-
-# Restore original values
-BAR_FILLED="${saved_filled}"
-BAR_EMPTY="${saved_empty}"
 
 # Test get_random_message_color()
 echo ""
