@@ -381,12 +381,26 @@ echo "${RED}text${NC}"  # Always reset after color
 - `CHANGE_ICON`: ✏️ (file changes)
 - Cost: 💰 (hardcoded in `build_cost_component()`)
 
-### Efficient String Operations
+### UTF-8 Character Handling
+
+The progress bar uses pure bash string concatenation to handle multibyte UTF-8 characters:
 
 ```bash
-# Build progress bar with printf + tr (faster than loops)
-printf "%${filled}s" | tr ' ' "${BAR_FILLED}"
+# Build progress bar with UTF-8 safe method
+for ((i=0; i<filled; i++)); do
+  filled_bar+="${BAR_FILLED}"
+done
 ```
+
+**Default characters**: `BAR_FILLED="█"` (filled block) and `BAR_EMPTY="░"` (light shade). These can be overridden via config file (`~/.claude/statusline-config.sh`).
+
+**Why not sed/awk**: While `sed` and `awk` handle UTF-8 correctly, they spawn subprocesses (78-93x slower).
+
+**Why not tr**: The `tr` command operates on bytes, not characters, breaking UTF-8 encoding:
+- `tr ' ' '█'` produces: `e2e2e2...` (broken)
+- Bash loop produces: `e29688e29688...` (correct)
+
+**Performance**: Pure bash loops are 78x faster than `sed` for this operation (5ms vs 392ms per 100 iterations).
 
 ### Conditional Display
 

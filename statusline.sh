@@ -5,8 +5,6 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures (bash 3.2+)
 # CONFIGURATION
 # ============================================================
 readonly BAR_WIDTH=15
-readonly BAR_FILLED="█"
-readonly BAR_EMPTY="░"
 
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -37,6 +35,10 @@ readonly STATE_DIRTY="dirty"
 readonly DEFAULT_LANGUAGE="en"
 readonly CONFIG_FILE="${CONFIG_FILE:-${HOME}/.claude/statusline-config.sh}"
 readonly MESSAGES_DIR="${MESSAGES_DIR:-${HOME}/.claude/messages}"
+
+# Default characters (overridden by config if present)
+BAR_FILLED="${BAR_FILLED:-█}"
+BAR_EMPTY="${BAR_EMPTY:-░}"
 
 # ============================================================
 # I18N FUNCTIONS
@@ -226,12 +228,18 @@ build_progress_bar() {
     *) bar_color="${GRAY}" ;;     # Fallback
   esac
 
-  # Build colored filled portion and gray empty portion
-  echo -n "${bar_color}"
-  printf "%${filled}s" | tr ' ' "${BAR_FILLED}"
-  echo -n "${NC}${GRAY}"
-  printf "%${empty}s" | tr ' ' "${BAR_EMPTY}"
-  echo -n "${NC}"
+  # Build filled and empty portions (pure bash - UTF-8 safe)
+  local filled_bar="" empty_bar=""
+  local i
+  for ((i=0; i<filled; i++)); do
+    filled_bar+="${BAR_FILLED}"
+  done
+  for ((i=0; i<empty; i++)); do
+    empty_bar+="${BAR_EMPTY}"
+  done
+
+  # Output with colors
+  echo -n "${bar_color}${filled_bar}${NC}${GRAY}${empty_bar}${NC}"
 }
 
 # Get random context message based on usage percentage
@@ -584,6 +592,7 @@ main() {
     echo "Error: Failed to read stdin" >&2
     exit 1
   }
+
 
   # Parse JSON
   local parsed
