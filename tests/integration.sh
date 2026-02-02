@@ -276,25 +276,12 @@ main() {
     }
   }'
 
-  # Test 17-19: Character configuration tests
-  echo -e "\n${YELLOW}=== Character Configuration Tests ===${NC}"
+  # Test 17-18: Hardcoded character tests (config override removed)
+  echo -e "\n${YELLOW}=== Hardcoded Character Tests ===${NC}"
 
-  # Test 17: Statusline uses custom characters from config
-  test_with_config "Config with custom characters (█/░)" \
-    "readonly STATUSLINE_LANGUAGE=\"en\"
-readonly BAR_FILLED=\"█\"
-readonly BAR_EMPTY=\"░\"" \
-    '{
-      "model": {"display_name": "Test"},
-      "workspace": {"current_dir": "."},
-      "context_window": {
-        "context_window_size": 200000,
-        "current_usage": {"input_tokens": 10000}
-      }
-    }'
-
-  # Test 18: Statusline uses ASCII characters from config
-  test_with_config "Config with ASCII characters (#/-)" \
+  # Test 17: Statusline always uses hardcoded Unicode characters (ignores config)
+  # Even if config tries to override with ASCII, statusline should use Unicode
+  test_with_config "Always uses Unicode █/░ (ignores config)" \
     "readonly STATUSLINE_LANGUAGE=\"en\"
 readonly BAR_FILLED=\"#\"
 readonly BAR_EMPTY=\"-\"" \
@@ -307,8 +294,8 @@ readonly BAR_EMPTY=\"-\"" \
       }
     }'
 
-  # Test 19: Backward compatibility - statusline works without character config
-  test_with_config "Config without character definitions" \
+  # Test 18: Works without character definitions in config
+  test_with_config "Works without character config" \
     "readonly STATUSLINE_LANGUAGE=\"en\"" \
     '{
       "model": {"display_name": "Test"},
@@ -319,14 +306,12 @@ readonly BAR_EMPTY=\"-\"" \
       }
     }'
 
-  # Test 20-22: UTF-8 character rendering tests
+  # Test 19-20: UTF-8 character rendering tests
   echo -e "\n${YELLOW}=== UTF-8 Character Rendering Tests ===${NC}"
 
-  # Test 20: Unicode progress bar rendering
-  test_with_config "Unicode progress bar in full statusline" \
-    "readonly STATUSLINE_LANGUAGE=\"en\"
-readonly BAR_FILLED=\"█\"
-readonly BAR_EMPTY=\"░\"" \
+  # Test 19: Unicode progress bar rendering in full statusline
+  test_with_config "Unicode progress bar renders correctly" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"" \
     '{
       "model": {"display_name": "Test"},
       "workspace": {"current_dir": "."},
@@ -336,31 +321,15 @@ readonly BAR_EMPTY=\"░\"" \
       }
     }'
 
-  # Test 21: ASCII fallback progress bar
-  test_with_config "ASCII progress bar in full statusline" \
-    "readonly STATUSLINE_LANGUAGE=\"en\"
-readonly BAR_FILLED=\"#\"
-readonly BAR_EMPTY=\"-\"" \
+  # Test 20: High context usage (near 100%) with Unicode
+  test_with_config "High context usage with Unicode" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"" \
     '{
       "model": {"display_name": "Test"},
       "workspace": {"current_dir": "."},
       "context_window": {
         "context_window_size": 200000,
-        "current_usage": {"input_tokens": 100000}
-      }
-    }'
-
-  # Test 22: Linux console characters
-  test_with_config "Linux console progress bar" \
-    "readonly STATUSLINE_LANGUAGE=\"en\"
-readonly BAR_FILLED=\"▓\"
-readonly BAR_EMPTY=\"░\"" \
-    '{
-      "model": {"display_name": "Test"},
-      "workspace": {"current_dir": "."},
-      "context_window": {
-        "context_window_size": 200000,
-        "current_usage": {"input_tokens": 100000}
+        "current_usage": {"input_tokens": 190000}
       }
     }'
 

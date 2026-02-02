@@ -392,7 +392,7 @@ for ((i=0; i<filled; i++)); do
 done
 ```
 
-**Default characters**: `BAR_FILLED="█"` (filled block) and `BAR_EMPTY="░"` (light shade). These can be overridden via config file (`~/.claude/statusline-config.sh`).
+**Characters**: `BAR_FILLED="█"` (filled block, U+2588) and `BAR_EMPTY="░"` (light shade, U+2591). These are hardcoded constants and cannot be customized.
 
 **Why not sed/awk**: While `sed` and `awk` handle UTF-8 correctly, they spawn subprocesses (78-93x slower).
 
@@ -412,6 +412,51 @@ append_if() {
   [[ "${value}" != "0" ]] 2>/dev/null && [[ -n "${value}" ]] && [[ "${value}" != "${NULL_VALUE}" ]] && echo -n " ${text}"
 }
 ```
+
+## Fallback Mechanisms
+
+The codebase contains several fallback mechanisms for robustness and compatibility:
+
+### Language Configuration
+- **Primary**: User's configured language (`~/.claude/statusline-config.sh`)
+- **Fallback 1**: `DEFAULT_LANGUAGE` ("en")
+- **Fallback 2**: Exit with error if en.sh missing
+
+Strategy: Graceful degradation to English, hard failure only if system is critically broken.
+
+### JSON Parsing (statusline.sh)
+Uses jq's `//` operator for null-safe defaults:
+- `context_window_size`: 200000
+- Token counts: 0
+- Cost: 0
+
+Strategy: Sensible defaults when Claude Code doesn't provide values.
+
+### Git State Defaults (statusline.sh)
+- `branch`: "(detached HEAD)"
+- `ahead`/`behind`: 0
+
+Strategy: Display useful fallback text for unusual git states.
+
+### Platform Detection (install.sh)
+- **Primary**: `uname -s` output (Darwin, Linux)
+- **Fallback**: "Unknown" if command fails
+- **Package manager chain**: apt-get → yum → dnf → generic
+
+Strategy: Best-effort platform detection with graceful unknown handling.
+
+### Timestamp Generation (install.sh)
+- **Primary**: `date +%s%N` (nanosecond precision, Linux)
+- **Fallback**: `date +%s.$$` (seconds + PID, macOS/BSD)
+
+Strategy: High precision when available, uniqueness when not.
+
+### Removed Fallbacks
+
+**Progress bar characters** (removed in current version):
+- Previously allowed override via `~/.claude/statusline-config.sh`
+- Now uses hardcoded Unicode constants: `BAR_FILLED="█"` and `BAR_EMPTY="░"`
+- Rationale: Simplification - modern terminals universally support these characters
 
 ## File Locations
 

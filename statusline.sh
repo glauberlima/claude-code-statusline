@@ -36,9 +36,9 @@ readonly DEFAULT_LANGUAGE="en"
 readonly CONFIG_FILE="${CONFIG_FILE:-${HOME}/.claude/statusline-config.sh}"
 readonly MESSAGES_DIR="${MESSAGES_DIR:-${HOME}/.claude/messages}"
 
-# Default characters (overridden by config if present)
-BAR_FILLED="${BAR_FILLED:-█}"
-BAR_EMPTY="${BAR_EMPTY:-░}"
+# Progress bar characters
+readonly BAR_FILLED="█"
+readonly BAR_EMPTY="░"
 
 # ============================================================
 # I18N FUNCTIONS
