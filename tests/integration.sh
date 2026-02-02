@@ -42,6 +42,37 @@ run_test() {
 }
 
 # Main test suite
+# Test helper for config tests
+test_with_config() {
+  local test_name="$1"
+  local config_content="$2"
+  local json_input="$3"
+
+  TOTAL=$((TOTAL + 1))
+
+  local temp_config
+  temp_config=$(mktemp)
+  echo "${config_content}" > "${temp_config}"
+
+  local output exit_code=0
+  CONFIG_FILE="${temp_config}" MESSAGES_DIR="${SCRIPT_DIR}/messages" \
+    output=$(echo "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
+
+  rm -f "${temp_config}"
+
+  if [[ ${exit_code} -eq 0 ]]; then
+    echo -e "${GREEN}✓${NC} ${test_name}"
+    PASSED=$((PASSED + 1))
+  else
+    echo -e "${RED}✗${NC} ${test_name}"
+    echo "  Exit code: ${exit_code}"
+    echo "  Output: ${output}"
+    FAILED=$((FAILED + 1))
+  fi
+
+  return 0
+}
+
 main() {
   # Set up test environment for i18n
   export MESSAGES_DIR="${SCRIPT_DIR}/messages"
@@ -244,6 +275,94 @@ main() {
       "current_usage": {"input_tokens": 10000}
     }
   }'
+
+  # Test 17-19: Character configuration tests
+  echo -e "\n${YELLOW}=== Character Configuration Tests ===${NC}"
+
+  # Test 17: Statusline uses custom characters from config
+  test_with_config "Config with custom characters (█/░)" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"
+readonly BAR_FILLED=\"█\"
+readonly BAR_EMPTY=\"░\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 10000}
+      }
+    }'
+
+  # Test 18: Statusline uses ASCII characters from config
+  test_with_config "Config with ASCII characters (#/-)" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"
+readonly BAR_FILLED=\"#\"
+readonly BAR_EMPTY=\"-\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 10000}
+      }
+    }'
+
+  # Test 19: Backward compatibility - statusline works without character config
+  test_with_config "Config without character definitions" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 10000}
+      }
+    }'
+
+  # Test 20-22: UTF-8 character rendering tests
+  echo -e "\n${YELLOW}=== UTF-8 Character Rendering Tests ===${NC}"
+
+  # Test 20: Unicode progress bar rendering
+  test_with_config "Unicode progress bar in full statusline" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"
+readonly BAR_FILLED=\"█\"
+readonly BAR_EMPTY=\"░\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 100000}
+      }
+    }'
+
+  # Test 21: ASCII fallback progress bar
+  test_with_config "ASCII progress bar in full statusline" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"
+readonly BAR_FILLED=\"#\"
+readonly BAR_EMPTY=\"-\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 100000}
+      }
+    }'
+
+  # Test 22: Linux console characters
+  test_with_config "Linux console progress bar" \
+    "readonly STATUSLINE_LANGUAGE=\"en\"
+readonly BAR_FILLED=\"▓\"
+readonly BAR_EMPTY=\"░\"" \
+    '{
+      "model": {"display_name": "Test"},
+      "workspace": {"current_dir": "."},
+      "context_window": {
+        "context_window_size": 200000,
+        "current_usage": {"input_tokens": 100000}
+      }
+    }'
 
   # Summary
   echo -e "\n${YELLOW}=== Test Summary ===${NC}"
