@@ -120,16 +120,23 @@ validate_directory() {
   # Reject paths starting with ~
   [[ "${dir}" =~ ^~ ]] && return 1
 
-  # Reject shell metacharacters
-  [[ "${dir}" =~ [\$\`\;] ]] && return 1
-
-  return 0
+  # Reject shell metacharacters (using case for better portability)
+  case "${dir}" in
+    *'$'*|*'`'*|*';'*) return 1 ;;
+    *) return 0 ;;  # Valid path
+  esac
 }
 
 # Format numbers with K/M suffixes for readability
 # Examples: 543 -> "543", 1500 -> "1.5K", 54000 -> "54K", 1200000 -> "1.2M"
 format_number() {
   local num="$1"
+
+  # Validate input is a non-negative integer
+  if ! [[ "${num}" =~ ^[0-9]+$ ]]; then
+    echo "0"
+    return 1
+  fi
 
   if [[ "${num}" -lt 1000 ]]; then
     echo "${num}"
@@ -161,17 +168,30 @@ format_number() {
 # Returns a random ANSI color code for context messages
 # Uses modulo to select from predefined color pool (5 colors)
 # Returns: ANSI color escape sequence
+# Bash 3.2 compatible: uses pipe-delimited string instead of arrays
 get_random_message_color() {
-  local -a colors=(
-    "${GREEN}"
-    "${CYAN}"
-    "${BLUE}"
-    "${MAGENTA}"
-    "${ORANGE}"
-  )
+  local colors="${GREEN}|${CYAN}|${BLUE}|${MAGENTA}|${ORANGE}"
+  local colors_count=5
 
-  local index=$(( RANDOM % ${#colors[@]} ))
-  echo "${colors[index]}"
+  # Better distribution than simple modulo (reduces bias)
+  local index=$(( (RANDOM * colors_count) / 32768 ))
+
+  # Extract color using parameter expansion (Bash 3.2 compatible)
+  local i=0
+  local saved_ifs="${IFS}"
+  IFS='|'
+  for color in ${colors}; do
+    if [[ ${i} -eq ${index} ]]; then
+      IFS="${saved_ifs}"
+      echo "${color}"
+      return 0
+    fi
+    ((i++))
+  done
+  IFS="${saved_ifs}"
+
+  # Fallback (should never reach)
+  echo "${CYAN}"
 }
 
 # ============================================================
@@ -220,6 +240,14 @@ parse_claude_input() {
 
 build_progress_bar() {
   local percent="$1"
+
+  # Clamp percent to 0-100 range (prevent negative/overflow)
+  if [[ ${percent} -lt 0 ]]; then
+    percent=0
+  elif [[ ${percent} -gt 100 ]]; then
+    percent=100
+  fi
+
   local filled=$((percent * BAR_WIDTH / 100))
   local empty=$((BAR_WIDTH - filled))
 
@@ -251,33 +279,117 @@ build_progress_bar() {
 }
 
 # Get random context message based on usage percentage
+# Bash 3.2 compatible: uses pipe-delimited strings instead of arrays
 get_context_message() {
   local percent="$1"
-  local messages=()
+  local msg_string=""
 
-  # Determine tier and select message array
+  # Determine tier and select message string
   local tier
   tier=$(get_context_tier "${percent}")
 
-  # shellcheck disable=SC2154  # CONTEXT_MSG_* arrays sourced from language files
+  # shellcheck disable=SC2154  # CONTEXT_MSG_* strings sourced from language files
   case "${tier}" in
-    0) messages=("${CONTEXT_MSG_VERY_LOW[@]}") ;;
-    1) messages=("${CONTEXT_MSG_LOW[@]}") ;;
-    2) messages=("${CONTEXT_MSG_MEDIUM[@]}") ;;
-    3) messages=("${CONTEXT_MSG_HIGH[@]}") ;;
-    4) messages=("${CONTEXT_MSG_CRITICAL[@]}") ;;
-    *) messages=("unknown tier") ;;  # Fallback
+    0) msg_string="${CONTEXT_MSG_VERY_LOW}" ;;
+    1) msg_string="${CONTEXT_MSG_LOW}" ;;
+    2) msg_string="${CONTEXT_MSG_MEDIUM}" ;;
+    3) msg_string="${CONTEXT_MSG_HIGH}" ;;
+    4) msg_string="${CONTEXT_MSG_CRITICAL}" ;;
+    *) msg_string="unknown tier" ;;  # Fallback
   esac
 
-  # Random selection using bash $RANDOM
-  local count=${#messages[@]}
-  local index=$((RANDOM % count))
-  echo "${messages[${index}]}"
+  # Validate non-empty message string
+  if [[ -z "${msg_string}" ]]; then
+    echo "loading..."
+    return 0
+  fi
+
+  # Count messages using IFS
+  local count=0
+  local saved_ifs="${IFS}"
+  IFS='|'
+  for _ in ${msg_string}; do
+    ((count++))
+  done
+  IFS="${saved_ifs}"
+
+  # Protect against division by zero
+  if [[ ${count} -le 0 ]]; then
+    echo "loading..."
+    return 0
+  fi
+
+  # Better distribution (reduces bias for small counts)
+  local index=$(( (RANDOM * count) / 32768 ))
+
+  # Extract selected message
+  local i=0
+  IFS='|'
+  for message in ${msg_string}; do
+    if [[ ${i} -eq ${index} ]]; then
+      IFS="${saved_ifs}"
+      echo "${message}"
+      return 0
+    fi
+    ((i++))
+  done
+  IFS="${saved_ifs}"
+
+  # Fallback (should never reach)
+  echo "loading..."
 }
 
 # ============================================================
 # GIT OPERATIONS (Optimized - 7 calls reduced to 2)
 # ============================================================
+
+# Helper function to parse git status output with isolated IFS
+# Returns: "STATE|branch|total_files|ahead|behind"
+parse_git_status_output() {
+  local output="$1"
+  local line branch="" ahead="0" behind="0" total_files=0
+  local saved_ifs="${IFS}"
+
+  # Parse with IFS isolated to this function
+  while IFS= read -r line; do
+    case "${line}" in
+      "# branch.head "*)
+        branch="${line#\# branch.head }"
+        ;;
+      "# branch.ab "*)
+        local ab="${line#\# branch.ab }"
+        ahead="${ab%% *}"
+        ahead="${ahead#+}"
+        behind="${ab##* }"
+        behind="${behind#-}"
+        ;;
+      "#"*)
+        # Ignore other comment lines
+        ;;
+      *)
+        # Non-comment lines are file status entries - count them
+        [[ -n "${line}" ]] && ((total_files++))
+        ;;
+    esac
+  done << EOF
+${output}
+EOF
+
+  # Restore IFS
+  IFS="${saved_ifs}"
+
+  # Default values
+  branch="${branch:-(detached HEAD)}"
+  ahead="${ahead:-0}"
+  behind="${behind:-0}"
+
+  # Determine state
+  if [[ "${total_files}" -eq 0 ]]; then
+    echo "${STATE_CLEAN}|${branch}|0|${ahead}|${behind}"
+  else
+    echo "${STATE_DIRTY}|${branch}|${total_files}|${ahead}|${behind}"
+  fi
+}
 
 get_git_info() {
   local current_dir="$1"
@@ -312,44 +424,8 @@ get_git_info() {
     return 0
   }
 
-  # Parse porcelain v2 output and count files in single pass
-  local branch ahead behind total_files=0
-  while IFS= read -r line; do
-    case "${line}" in
-      "# branch.head "*)
-        branch="${line#\# branch.head }"
-        ;;
-      "# branch.ab "*)
-        local ab="${line#\# branch.ab }"
-        ahead="${ab%% *}"
-        ahead="${ahead#+}"
-        behind="${ab##* }"
-        behind="${behind#-}"
-        ;;
-      "#"*)
-        # Ignore other comment lines
-        ;;
-      *)
-        # Non-comment lines are file status entries - count them
-        [[ -n "${line}" ]] && ((total_files++))
-        ;;
-    esac
-  done << EOF
-${status_output}
-EOF
-
-  # Default values
-  branch="${branch:-(detached HEAD)}"
-  ahead="${ahead:-0}"
-  behind="${behind:-0}"
-
-  # Clean state if no files
-  if [[ "${total_files}" -eq 0 ]]; then
-    echo "${STATE_CLEAN}|${branch}|${ahead}|${behind}"
-    return 0
-  fi
-
-  echo "${STATE_DIRTY}|${branch}|${total_files}|${ahead}|${behind}"
+  # Parse using helper function (IFS isolation)
+  parse_git_status_output "${status_output}"
 }
 
 # ============================================================
@@ -361,8 +437,14 @@ format_ahead_behind() {
   local behind="$2"
   local output=""
 
-  [[ "${ahead}" -gt 0 ]] 2>/dev/null && output+=" ${GREEN}↑${ahead}${NC}"
-  [[ "${behind}" -gt 0 ]] 2>/dev/null && output+=" ${RED}↓${behind}${NC}"
+  # Validate numeric before arithmetic (maintain existing 2>/dev/null as requested)
+  if [[ "${ahead}" =~ ^[0-9]+$ ]] && [[ "${ahead}" -gt 0 ]] 2>/dev/null; then
+    output+=" ${GREEN}↑${ahead}${NC}"
+  fi
+
+  if [[ "${behind}" =~ ^[0-9]+$ ]] && [[ "${behind}" -gt 0 ]] 2>/dev/null; then
+    output+=" ${RED}↓${behind}${NC}"
+  fi
 
   [[ -n "${output}" ]] && echo "${GRAY}|${NC}${output}"
 }
@@ -399,11 +481,13 @@ format_git_dirty() {
 format_git_info() {
   local git_data="$1"
 
-  # Parse state
-  local state
+  # Parse state with IFS protection
+  local state saved_ifs
+  saved_ifs="${IFS}"
   IFS='|' read -r state _ << EOF
 ${git_data}
 EOF
+  IFS="${saved_ifs}"
 
   case "${state}" in
     "${STATE_NOT_REPO}")
@@ -414,9 +498,11 @@ EOF
       ;;
     "${STATE_CLEAN}")
       local branch ahead behind
+      saved_ifs="${IFS}"
       IFS='|' read -r _ branch ahead behind << EOF
 ${git_data}
 EOF
+      IFS="${saved_ifs}"
       # Returns "git_output|file_count" (empty file count for clean)
       local clean_msg
       clean_msg=$(format_git_clean "${branch}" "${ahead}" "${behind}")
@@ -424,9 +510,11 @@ EOF
       ;;
     "${STATE_DIRTY}")
       local branch files ahead behind
+      saved_ifs="${IFS}"
       IFS='|' read -r _ branch files ahead behind << EOF
 ${git_data}
 EOF
+      IFS="${saved_ifs}"
       # Already returns "git_output|file_count"
       format_git_dirty "${branch}" "${files}" "${ahead}" "${behind}"
       ;;
@@ -451,9 +539,18 @@ build_context_component() {
   local current_usage="$2"
   local show_messages="${3:-true}"  # Default true for backwards compat
 
+  # Calculate percentage with division-by-zero protection
+  # Reorder arithmetic: multiply first, then divide (prevents division by zero when context_size < 100)
   local context_percent=0
-  if [[ "${current_usage}" != "0" && "${context_size}" -gt 0 ]]; then
-    context_percent=$((current_usage / (context_size / 100)))
+  if [[ "${current_usage}" -gt 0 ]] && [[ "${context_size}" -gt 0 ]]; then
+    context_percent=$(( (current_usage * 100) / context_size ))
+
+    # Clamp to 0-100 range (prevent overflow)
+    if [[ ${context_percent} -gt 100 ]]; then
+      context_percent=100
+    elif [[ ${context_percent} -lt 0 ]]; then
+      context_percent=0
+    fi
   fi
 
   # Get colored progress bar
@@ -502,15 +599,19 @@ build_git_component() {
   git_data=$(get_git_info "${current_dir}")
 
   # format_git_info returns "git_output|file_count" format
-  local formatted git_line file_line
+  local formatted git_line file_line saved_ifs
   formatted=$(format_git_info "${git_data}")
+  saved_ifs="${IFS}"
   IFS='|' read -r git_line file_line <<< "${formatted}"
+  IFS="${saved_ifs}"
 
   # Extract state to determine emoji placement
   local state
+  saved_ifs="${IFS}"
   IFS='|' read -r state _ << EOF
 ${git_data}
 EOF
+  IFS="${saved_ifs}"
 
   # Return git info and file count separately: "git_display|file_count"
   if [[ "${state}" = "${STATE_NOT_REPO}" ]]; then
@@ -581,6 +682,12 @@ assemble_statusline() {
 # ============================================================
 
 main() {
+  # Validate environment
+  if [[ -z "${HOME}" ]]; then
+    echo "Error: HOME environment variable not set" >&2
+    exit 1
+  fi
+
   # Check dependencies
   command -v jq >/dev/null 2>&1 || {
     echo "Error: jq required" >&2
@@ -592,8 +699,10 @@ main() {
   user_config=$(load_config)
 
   # Parse config: "language|show_messages|show_cost"
-  local user_language
+  local user_language saved_ifs
+  saved_ifs="${IFS}"
   IFS='|' read -r user_language show_messages show_cost <<< "${user_config}"
+  IFS="${saved_ifs}"
 
   load_language_messages "${user_language}"
 
@@ -615,11 +724,24 @@ main() {
     exit 1
   }
 
+  # Validate non-empty input
+  if [[ -z "${input}" ]]; then
+    echo "Error: Empty JSON input received" >&2
+    exit 1
+  fi
 
   # Parse JSON
   local parsed
   parsed=$(parse_claude_input "${input}")
   if [[ -z "${parsed}" ]]; then
+    exit 1
+  fi
+
+  # Validate field count (expected: 5 lines)
+  local line_count
+  line_count=$(echo "${parsed}" | wc -l)
+  if [[ ${line_count} -ne 5 ]]; then
+    echo "Error: Expected 5 fields from JSON, got ${line_count}" >&2
     exit 1
   fi
 
@@ -644,7 +766,9 @@ EOF
   # Git component returns "git_display|file_count"
   local git_with_files file_count
   git_with_files=$(build_git_component "${current_dir}")
+  saved_ifs="${IFS}"
   IFS='|' read -r git_part file_count <<< "${git_with_files}"
+  IFS="${saved_ifs}"
 
   files_part=$(build_files_component "${file_count}")
   cost_part=$(build_cost_component "${cost_usd}" "${show_cost}")
