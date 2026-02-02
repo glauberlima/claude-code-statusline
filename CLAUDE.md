@@ -27,7 +27,7 @@ Bash-based statusline for Claude Code CLI displaying (in order):
 # Individual test suites
 ./tests/unit.sh          # Component-level tests (< 1s)
 ./tests/integration.sh   # End-to-end tests with JSON fixtures
-./tests/shellcheck.sh    # Static analysis (zero-tolerance, all checks enabled)
+./tests/shellcheck.sh    # Bash syntax (bash -n) + static analysis (zero-tolerance, all checks enabled)
 
 # Manual testing
 cat tests/fixtures/test-input.json | ./statusline.sh
@@ -42,6 +42,10 @@ cat tests/fixtures/test-input.json | ./statusline.sh
 ### Linting
 
 ```bash
+# Automated (recommended - includes bash -n syntax check)
+./tests/shellcheck.sh
+
+# Manual shellcheck only
 shellcheck statusline.sh install.sh messages/*.sh tests/*.sh  # Uses .shellcheckrc config
 ```
 
@@ -182,7 +186,7 @@ See `messages/README.md` for complete translation guidelines.
 2. Translate messages (keep array names identical)
 3. Test: `bash -n messages/de.sh && shellcheck messages/de.sh`
 4. Update `install.sh` line 335: Add "de" to `available_languages`
-5. Run tests: `./tests/unit.sh && ./tests/integration.sh`
+5. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
 6. Update this documentation
 
 ## Code Style Guidelines
@@ -304,12 +308,18 @@ Test complete statusline with JSON fixtures:
 
 ### Static Analysis (tests/shellcheck.sh)
 
-Zero-tolerance policy:
+Two-phase validation with zero-tolerance policy:
 
-- All 11 optional checks enabled (.shellcheckrc)
-- Extended dataflow analysis
-- External source checking
-- **Checks messages/*.sh** for all language files
+1. **Bash syntax validation** (`bash -n`):
+   - Verifies syntax correctness before execution
+   - Catches parse errors early
+   - Tests all .sh files
+
+2. **Shellcheck static analysis**:
+   - All 11 optional checks enabled (.shellcheckrc)
+   - Extended dataflow analysis
+   - External source checking
+   - **Checks messages/*.sh** for all language files
 
 ## Dependencies
 

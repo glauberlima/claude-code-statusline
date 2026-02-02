@@ -434,13 +434,13 @@ for lang in en pt es; do
   lang_file="messages/${lang}.sh"
 
   if [[ -f "${lang_file}" ]]; then
-    # Use bash -c to create clean environment
+    # Use bash -c to create clean environment (Bash 3.2 compatible: check strings not arrays)
     if bash -c "source ${lang_file} && \
-       [[ \${#CONTEXT_MSG_VERY_LOW[@]} -gt 0 ]] && \
-       [[ \${#CONTEXT_MSG_LOW[@]} -gt 0 ]] && \
-       [[ \${#CONTEXT_MSG_MEDIUM[@]} -gt 0 ]] && \
-       [[ \${#CONTEXT_MSG_HIGH[@]} -gt 0 ]] && \
-       [[ \${#CONTEXT_MSG_CRITICAL[@]} -gt 0 ]]"; then
+       [[ -n \"\${CONTEXT_MSG_VERY_LOW}\" ]] && \
+       [[ -n \"\${CONTEXT_MSG_LOW}\" ]] && \
+       [[ -n \"\${CONTEXT_MSG_MEDIUM}\" ]] && \
+       [[ -n \"\${CONTEXT_MSG_HIGH}\" ]] && \
+       [[ -n \"\${CONTEXT_MSG_CRITICAL}\" ]]"; then
       pass "Language file valid: ${lang}"
     else
       fail "Language file invalid: ${lang}"
@@ -450,21 +450,26 @@ for lang in en pt es; do
   fi
 done
 
-# Test: Array size validation (each tier should have 15-30 messages)
+# Test: String size validation (each tier should have 15+ messages in pipe-delimited format)
 for lang in en pt es; do
   lang_file="messages/${lang}.sh"
 
   if [[ -f "${lang_file}" ]]; then
-    # Use bash -c to create clean environment
+    # Count messages by counting pipes + 1 (Bash 3.2 compatible)
     if bash -c "source ${lang_file} && \
-       [[ \${#CONTEXT_MSG_VERY_LOW[@]} -ge 15 ]] && \
-       [[ \${#CONTEXT_MSG_LOW[@]} -ge 15 ]] && \
-       [[ \${#CONTEXT_MSG_MEDIUM[@]} -ge 15 ]] && \
-       [[ \${#CONTEXT_MSG_HIGH[@]} -ge 15 ]] && \
-       [[ \${#CONTEXT_MSG_CRITICAL[@]} -ge 15 ]]"; then
-      pass "Language arrays have valid sizes: ${lang}"
+       very_low_count=\$(echo \"\${CONTEXT_MSG_VERY_LOW}\" | tr '|' '\n' | wc -l) && \
+       low_count=\$(echo \"\${CONTEXT_MSG_LOW}\" | tr '|' '\n' | wc -l) && \
+       medium_count=\$(echo \"\${CONTEXT_MSG_MEDIUM}\" | tr '|' '\n' | wc -l) && \
+       high_count=\$(echo \"\${CONTEXT_MSG_HIGH}\" | tr '|' '\n' | wc -l) && \
+       critical_count=\$(echo \"\${CONTEXT_MSG_CRITICAL}\" | tr '|' '\n' | wc -l) && \
+       [[ \${very_low_count} -ge 15 ]] && \
+       [[ \${low_count} -ge 15 ]] && \
+       [[ \${medium_count} -ge 15 ]] && \
+       [[ \${high_count} -ge 15 ]] && \
+       [[ \${critical_count} -ge 15 ]]"; then
+      pass "Language strings have valid sizes: ${lang}"
     else
-      fail "Language arrays too small: ${lang}"
+      fail "Language strings too small: ${lang}"
     fi
   fi
 done
