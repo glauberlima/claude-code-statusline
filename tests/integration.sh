@@ -333,6 +333,48 @@ readonly BAR_EMPTY=\"-\"" \
       }
     }'
 
+  echo -e "\n${YELLOW}=== Component Toggle Tests ===${NC}"
+
+  # Test JSON fixtures
+  local test_json='{"model":{"display_name":"Test"},"workspace":{"current_dir":"."},"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":50000}}}'
+  local test_json_with_cost='{"model":{"display_name":"Test"},"workspace":{"current_dir":"."},"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":50000}},"cost":{"total_cost_usd":1.50}}'
+
+  # Test 1: Messages disabled
+  temp_config=$(mktemp)
+  cat > "${temp_config}" <<'EOF'
+readonly STATUSLINE_LANGUAGE="en"
+readonly STATUSLINE_SHOW_MESSAGES="false"
+readonly STATUSLINE_SHOW_COST="true"
+EOF
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Component: Messages disabled" "${test_json}"
+  rm -f "${temp_config}"
+
+  # Test 2: Cost disabled
+  temp_config=$(mktemp)
+  cat > "${temp_config}" <<'EOF'
+readonly STATUSLINE_LANGUAGE="en"
+readonly STATUSLINE_SHOW_MESSAGES="true"
+readonly STATUSLINE_SHOW_COST="false"
+EOF
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Component: Cost disabled" "${test_json_with_cost}"
+  rm -f "${temp_config}"
+
+  # Test 3: Both disabled
+  temp_config=$(mktemp)
+  cat > "${temp_config}" <<'EOF'
+readonly STATUSLINE_LANGUAGE="en"
+readonly STATUSLINE_SHOW_MESSAGES="false"
+readonly STATUSLINE_SHOW_COST="false"
+EOF
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Component: Both disabled" "${test_json_with_cost}"
+  rm -f "${temp_config}"
+
+  # Test 4: Backwards compatibility
+  temp_config=$(mktemp)
+  echo 'readonly STATUSLINE_LANGUAGE="pt"' > "${temp_config}"
+  MESSAGES_DIR="${SCRIPT_DIR}/messages" CONFIG_FILE="${temp_config}" run_test "Component: Backwards compat" "${test_json}"
+  rm -f "${temp_config}"
+
   # Summary
   echo -e "\n${YELLOW}=== Test Summary ===${NC}"
   echo "Total tests: ${TOTAL}"

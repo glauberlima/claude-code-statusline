@@ -45,18 +45,26 @@ readonly BAR_EMPTY="░"
 # ============================================================
 
 # Load user configuration
-# Returns: language code (e.g., "en", "pt", "es")
+# Returns: "language|show_messages|show_cost" (pipe-separated)
 load_config() {
   local config_lang="${DEFAULT_LANGUAGE}"
+  local config_messages="true"  # Default: show
+  local config_cost="true"       # Default: show
 
   # Source config if exists
   if [[ -f "${CONFIG_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${CONFIG_FILE}"
     config_lang="${STATUSLINE_LANGUAGE:-${DEFAULT_LANGUAGE}}"
+    config_messages="${STATUSLINE_SHOW_MESSAGES:-true}"
+    config_cost="${STATUSLINE_SHOW_COST:-true}"
+
+    # Validate boolean values (security: prevent injection)
+    [[ "${config_messages}" =~ ^(true|false)$ ]] || config_messages="true"
+    [[ "${config_cost}" =~ ^(true|false)$ ]] || config_cost="true"
   fi
 
-  echo "${config_lang}"
+  echo "${config_lang}|${config_messages}|${config_cost}"
 }
 
 # Load language messages
@@ -441,6 +449,7 @@ build_model_component() {
 build_context_component() {
   local context_size="$1"
   local current_usage="$2"
+  local show_messages="${3:-true}"  # Default true for backwards compat
 
   local context_percent=0
   if [[ "${current_usage}" != "0" && "${context_size}" -gt 0 ]]; then
@@ -457,16 +466,20 @@ build_context_component() {
   local size_formatted
   size_formatted=$(format_number "${context_size}")
 
-  # Get random funny message
-  local message
-  message=$(get_context_message "${context_percent}")
+  # Build message part conditionally
+  local message_part=""
+  if [[ "${show_messages}" == "true" ]]; then
+    local message
+    message=$(get_context_message "${context_percent}")
 
-  # Get random color for message
-  local msg_color
-  msg_color=$(get_random_message_color)
+    local msg_color
+    msg_color=$(get_random_message_color)
 
-  # Output with brackets, colored bar, formatted numbers, and message
-  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted} ${GRAY}|${NC} ${msg_color}${message}${NC}"
+    message_part=" ${GRAY}|${NC} ${msg_color}${message}${NC}"
+  fi
+
+  # Output with brackets, colored bar, formatted numbers, and optional message
+  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted}${message_part}"
 }
 
 build_directory_component() {
@@ -518,6 +531,10 @@ build_files_component() {
 
 build_cost_component() {
   local cost_usd="$1"
+  local show_cost="${2:-true}"  # Default true for backwards compat
+
+  # Early return if disabled
+  [[ "${show_cost}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
   if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
@@ -571,8 +588,13 @@ main() {
   }
 
   # Load configuration and language messages
+  local user_config show_messages show_cost
+  user_config=$(load_config)
+
+  # Parse config: "language|show_messages|show_cost"
   local user_language
-  user_language=$(load_config)
+  IFS='|' read -r user_language show_messages show_cost <<< "${user_config}"
+
   load_language_messages "${user_language}"
 
   # Check if stdin is a TTY (not piped input)
@@ -613,10 +635,10 @@ main() {
 ${parsed}
 EOF
 
-  # Build components
+  # Build components (pass toggle flags)
   local model_part context_part dir_part git_part cost_part files_part
   model_part=$(build_model_component "${model_name}")
-  context_part=$(build_context_component "${context_size}" "${current_usage}")
+  context_part=$(build_context_component "${context_size}" "${current_usage}" "${show_messages}")
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"
@@ -625,7 +647,7 @@ EOF
   IFS='|' read -r git_part file_count <<< "${git_with_files}"
 
   files_part=$(build_files_component "${file_count}")
-  cost_part=$(build_cost_component "${cost_usd}")
+  cost_part=$(build_cost_component "${cost_usd}" "${show_cost}")
 
   # Assemble and output (no lines_part)
   assemble_statusline "${model_part}" "${context_part}" "${dir_part}" "${git_part}" "${files_part}" "${cost_part}"

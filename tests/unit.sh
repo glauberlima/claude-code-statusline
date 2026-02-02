@@ -207,6 +207,46 @@ test "build_files_component 0 files (should be empty)" "" "${result}"
 result=$(build_files_component "")
 test "build_files_component empty (should be empty)" "" "${result}"
 
+echo ""
+echo "Testing component toggle configuration..."
+
+# Test context component with messages disabled
+temp_result=$(build_context_component "200000" "50000" "false" | sed -E 's/\033\[[0-9;]*m//g')
+if echo "${temp_result}" | grep -qE '\\\|'; then
+  echo -e "${RED}✗${NC} Context component with messages=false still shows separator"
+  failed=$((failed + 1))
+else
+  echo -e "${GREEN}✓${NC} Context component respects show_messages=false"
+  passed=$((passed + 1))
+fi
+
+# Test cost component with cost disabled
+temp_result=$(build_cost_component "1.50" "false")
+test "build_cost_component with show_cost=false" "" "${temp_result}"
+
+# Note: load_config() tests are in integration tests due to readonly CONFIG_FILE
+# Here we test the component builders directly
+
+# Test that context component accepts the new parameter
+temp_result=$(build_context_component "200000" "50000" "true" | sed -E 's/\033\[[0-9;]*m//g')
+if echo "${temp_result}" | grep -qE '\\\|'; then
+  echo -e "${GREEN}✓${NC} Context component with messages=true shows separator"
+  passed=$((passed + 1))
+else
+  echo -e "${RED}✗${NC} Context component with messages=true missing separator"
+  failed=$((failed + 1))
+fi
+
+# Test cost component accepts the new parameter
+temp_result=$(build_cost_component "1.50" "true")
+if [[ -n "${temp_result}" ]]; then
+  echo -e "${GREEN}✓${NC} Cost component with show_cost=true shows cost"
+  passed=$((passed + 1))
+else
+  echo -e "${RED}✗${NC} Cost component with show_cost=true missing cost"
+  failed=$((failed + 1))
+fi
+
 # Test build_progress_bar() with Unicode characters
 echo ""
 echo "Testing build_progress_bar() UTF-8 handling..."
