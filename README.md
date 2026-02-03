@@ -1,10 +1,12 @@
+# Claude Code Statusline
+
 <p align="center">
-  <img src="assets/statusline-logo.png" alt="Claude Code Statusline" width="500">
+  <img src="assets/statusline-logo.png" alt="Claude Code Statusline" width="300">
 </p>
 
-> Ridiculously simple. Surprisingly rich.
-
-![Claude Code Statusline Demo](assets/statusline-demo.png)
+<p align="center">
+  <strong>> Ridiculously simple. Surprisingly rich.</strong>
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20MinGW-blue?style=for-the-badge" alt="Platform support" />
@@ -16,6 +18,10 @@
 ## 💡 What You Get
 
 More context in Claude Code's statusline: directory, git status, file changes, model, context usage with progress bar, and cost — all visible at once.
+
+<p align="center">
+  <img src="assets/statusline-demo.png" alt="Claude Code Statusline Demo" width="100%">
+</p>
 
 Install with one command. Works immediately. Configure when you need it.
 
