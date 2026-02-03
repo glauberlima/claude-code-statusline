@@ -1,106 +1,89 @@
 # Claude Code Statusline
 
-> Advanced statusline for Claude Code CLI with git integration and context visualization
+> Ridiculously simple. Surprisingly rich.
 
 ![Claude Code Statusline Demo](statusline-demo.png)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20MinGW-blue" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20MinGW-blue?style=for-the-badge" alt="Platform support" />
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green.svg" />
+    <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="MIT License" />
   </a>
 </p>
 
-## Features
+## 💡 What You Get
 
-Shows at a glance:
+More context in Claude Code's statusline: directory, git status, file changes, model, context usage with progress bar, and cost — all visible at once.
 
-- 📁 **Directory name**
-- 🌿 **Git branch** (when in a Git repository)
-- ✏️ **File changes** indicator (when present)
-- 🤖 **Model name**
-- 📊 **Context usage** (progress bar + percentage + funny messages)
-- 💰 **Cost tracking** (when present)
+Install with one command. Works immediately. Configure when you need it.
 
-## Prerequisites
-
-- **macOS**: `brew install jq git`
-- **Other platforms**: Install commands shown by install.sh if missing
-
-## Installation
-
-### Quick Install (Recommended)
-
-Install with a single command using curl:
+## ✨ Quick Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
 ```
 
-This will:
+**Requirements**: bash, jq, git (the installer checks and shows install commands if needed)
 
-- ✅ Check dependencies
-- ✅ Download statusline.sh to `~/.claude/statusline.sh`
-- ✅ Make it executable
-- ✅ Backup any existing installation
-- ✅ Show platform-specific install instructions for missing dependencies
+## Features
 
-### From Source (Local Development)
+- 📁 **Directory name**
+- 🌿 **Git branch**
+- ✏️ **File changes**
+- 🤖 **Model name**
+- 📊 **Context usage** with progress bar and funny messages
+- 💰 **Cost tracking**
 
-For local development:
+**Multi-language**: English, Brazilian Portuguese, Spanish
 
-```bash
-# Clone the repository
-git clone https://github.com/glauberlima/claude-code-statusline.git
-cd claude-code-statusline
+## ⚙️ Configuration
 
-# Run the installer (copies statusline.sh to ~/.claude/statusline.sh)
-./install.sh
-```
+### Change Language or Toggle Components
 
-After making changes to statusline.sh, run `./install.sh` again to update the installed version.
-
-## Language Support
-
-The statusline supports multiple languages for context usage messages.
-
-### Available Languages
-
-- 🇺🇸 **English (en)** - Default
-- 🇧🇷 **Português (pt)** - Brazilian Portuguese with cultural adaptation
-- 🇪🇸 **Español (es)** - Spanish
-
-### Change Language
-
-Run the installer again to select a different language:
+Run the installer again:
 
 ```bash
 ./install.sh
 ```
 
-The installer will prompt for language selection. Your choice persists until reinstalling.
+The installer lets you:
+- Select language (🇺🇸 English | 🇧🇷 Português | 🇪🇸 Español)
+- Enable/disable context messages
+- Enable/disable cost display
 
 ### Add a Language
 
 See [messages/README.md](messages/README.md) for translation guidelines.
 
-## Documentation
+## 🛠️ Development
 
-- [Official Statusline Spec](https://code.claude.com/docs/en/statusline) - Claude Code statusline documentation
+### From Source
 
-## Contributing
+```bash
+git clone https://github.com/glauberlima/claude-code-statusline.git
+cd claude-code-statusline
+./install.sh
+```
 
-Contributions welcome. Fork the repository, create a feature branch, test your changes, and submit a pull request. Follow existing code style and test on multiple platforms if possible.
+### Testing
+
+```bash
+./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh
+```
+
+### Contributing
+
+1. Fork and create a feature branch
+2. Make changes and run tests
+3. Submit a pull request
+
+See [CLAUDE.md](CLAUDE.md) for architecture details and development commands.
 
 ## Inspirations
-
-This statusline was inspired by excellent implementations from:
 
 - [Fatih Arslan](https://x.com/fatih/status/2003155214942241023)
 - [Frank Dilo](https://x.com/frankdilo/status/2003383256205672753)
 
 ## License
 
-[MIT License](LICENSE) - feel free to use, modify, and distribute.
-
----
+[MIT License](LICENSE)
