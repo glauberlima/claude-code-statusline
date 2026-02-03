@@ -6,6 +6,10 @@ set -euo pipefail
 # Source the statusline functions by extracting everything except the main call
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Set MESSAGES_DIR before sourcing (it will be made readonly during source)
+export MESSAGES_DIR="${SCRIPT_DIR}/messages"
+export CONFIG_FILE="${SCRIPT_DIR}/.test-config"
+
 # Create a temporary file with statusline functions (remove last line which calls main)
 TEMP_FILE=$(mktemp)
 sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
@@ -14,13 +18,6 @@ source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
 # Load language messages (required for statusline.sh)
-# MESSAGES_DIR is already set as readonly in sourced statusline.sh
-# shellcheck disable=SC2154  # MESSAGES_DIR is defined in sourced statusline.sh
-if [[ "${MESSAGES_DIR}" != "${SCRIPT_DIR}/messages" ]]; then
-  echo "Warning: MESSAGES_DIR=${MESSAGES_DIR}, expected ${SCRIPT_DIR}/messages"
-fi
-
-# Load messages using the statusline function
 load_language_messages "en"
 
 # Colors are already defined in statusline.sh as readonly
