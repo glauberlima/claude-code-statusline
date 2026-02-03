@@ -46,7 +46,7 @@ cat tests/fixtures/test-input.json | ./statusline.sh
 ./tests/shellcheck.sh
 
 # Manual shellcheck only
-shellcheck statusline.sh install.sh messages/*.sh tests/*.sh  # Uses .shellcheckrc config
+shellcheck statusline.sh install.sh tests/*.sh  # Uses .shellcheckrc config
 ```
 
 ## Architecture
@@ -111,29 +111,46 @@ This porcelain v2 format requires **git 2.11+** (Dec 2016).
 
 ### Architecture
 
-The statusline supports multiple languages through a dynamic message loading system:
+The statusline supports multiple languages through a JSON-based message system:
 
 ```
-install.sh → prompts user → saves choice
+install.sh/install.ps1 → prompts user → saves choice
                 ↓
-~/.claude/statusline-config.sh (readonly STATUSLINE_LANGUAGE="pt")
+~/.claude/statusline-config.json {"language": "pt", ...}
                 ↓
 statusline.sh main() → load_config() → load_language_messages()
                 ↓
-~/.claude/messages/pt.sh (defines CONTEXT_MSG_* arrays)
+~/.claude/messages/pt.json (JSON with tier arrays)
+                ↓
+load_json_messages() → converts to pipe-delimited format
                 ↓
 get_context_message() (random selection from appropriate tier)
 ```
 
 ### Language Files Structure
 
-Each language file (`messages/{lang}.sh`) defines 5 readonly bash arrays:
+Each language file (`messages/{lang}.json`) is a JSON file with this structure:
 
-- `CONTEXT_MSG_VERY_LOW`: 0-20% context usage (~22 messages)
-- `CONTEXT_MSG_LOW`: 21-40% context usage (~22 messages)
-- `CONTEXT_MSG_MEDIUM`: 41-60% context usage (~23 messages)
-- `CONTEXT_MSG_HIGH`: 61-80% context usage (~24 messages)
-- `CONTEXT_MSG_CRITICAL`: 81-100% context usage (~28 messages)
+```json
+{
+  "language": "en",
+  "display_name": "English",
+  "tiers": {
+    "very_low": ["message1", "message2", ...],
+    "low": ["message1", "message2", ...],
+    "medium": ["message1", "message2", ...],
+    "high": ["message1", "message2", ...],
+    "critical": ["message1", "message2", ...]
+  }
+}
+```
+
+**Message Counts**:
+- `very_low`: 0-20% context usage (~22 messages)
+- `low`: 21-40% context usage (~22 messages)
+- `medium`: 41-60% context usage (~23 messages)
+- `high`: 61-80% context usage (~24 messages)
+- `critical`: 81-100% context usage (~28 messages)
 
 **Supported Languages**:
 - English (en) - Default
@@ -143,31 +160,36 @@ Each language file (`messages/{lang}.sh`) defines 5 readonly bash arrays:
 ### Key Functions
 
 **`load_config()`** (statusline.sh):
-- Reads `~/.claude/statusline-config.sh` if exists
-- Extracts `STATUSLINE_LANGUAGE` variable
-- Returns language code or defaults to "en"
-- Performance: <1ms (single file source)
+- Reads `~/.claude/statusline-config.json` if exists
+- Parses JSON with jq
+- Returns "language|show_messages|show_cost" format
+- Performance: ~2ms (jq parse)
 
 **`load_language_messages()`** (statusline.sh):
 - Takes language code as argument
-- Sources `~/.claude/messages/{lang}.sh`
-- Defines `CONTEXT_MSG_*` arrays in current scope
+- Calls `load_json_messages()` with JSON file path
 - Falls back to "en" if language file missing
-- Performance: 2-3ms (array definitions)
+- Performance: ~3-5ms (jq parse + conversion)
 
-**`prompt_language_selection()`** (install.sh):
+**`load_json_messages()`** (statusline.sh):
+- Parses JSON file with jq
+- Converts JSON arrays to pipe-delimited strings
+- Defines `CONTEXT_MSG_*` variables in parent scope
+- Single jq call for efficiency
+
+**`prompt_language_selection()`** (install.sh/install.ps1):
 - Interactive menu with 3 language options
-- Uses stderr (`>&2`) for UI, stdout for return value
+- Uses stderr for UI, stdout for return value
 - Validates selection, defaults to "en"
-- Saves choice to `statusline-config.sh`
+- Saves choice to `statusline-config.json`
 
 ### Fallback Strategy
 
 ```
-1. User's configured language (~/.claude/statusline-config.sh)
+1. User's configured language (~/.claude/statusline-config.json)
    ↓ if file doesn't exist
 2. DEFAULT_LANGUAGE="en"
-   ↓ if en.sh doesn't exist
+   ↓ if en.json doesn't exist
 3. Exit 1 with error (critical failure)
 ```
 
@@ -182,10 +204,11 @@ See `messages/README.md` for complete translation guidelines.
 
 ### Adding a New Language
 
-1. Create `messages/de.sh` (copy from `messages/en.sh`)
-2. Translate messages (keep array names identical)
-3. Test: `bash -n messages/de.sh && shellcheck messages/de.sh`
-4. Update `install.sh` line 335: Add "de" to `available_languages`
+1. Create `messages/de.json` (copy from `messages/en.json`)
+2. Update `"language"` and `"display_name"` fields
+3. Translate all messages in tier arrays
+4. Validate: `jq empty messages/de.json`
+5. Update installers to include "de" in available languages
 5. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
 6. Update this documentation
 
@@ -286,9 +309,9 @@ Test individual functions in isolation:
 - Context messages (`get_context_message()`)
 - Progress bar rendering
 - **Language file validation**:
-  - Each language file defines all 5 required arrays
-  - Arrays have minimum 15 messages per tier
-  - Files are valid bash syntax
+  - Each language file defines all 5 required tiers
+  - Each tier has minimum 15 messages
+  - Files are valid JSON
 - **Color randomization** (`get_random_message_color()`)
 
 ### Integration Tests (tests/integration.sh)
@@ -319,7 +342,7 @@ Two-phase validation with zero-tolerance policy:
    - All 11 optional checks enabled (.shellcheckrc)
    - Extended dataflow analysis
    - External source checking
-   - **Checks messages/*.sh** for all language files
+   - Validates all bash scripts
 
 ## Dependencies
 
@@ -472,16 +495,17 @@ Strategy: High precision when available, uniqueness when not.
 
 ```
 /
-├── statusline.sh          # Main implementation (~700 lines)
-├── install.sh             # Installer script (always copies, no symlink mode)
+├── statusline.sh          # Main implementation (~680 lines)
+├── install.sh             # Unix installer script
+├── install.ps1            # Windows PowerShell installer
 ├── README.md              # User-facing documentation
 ├── .shellcheckrc          # Linter config (all checks enabled)
 ├── .editorconfig          # Code style enforcement
 ├── .gitignore             # Excluded files (IDE tools, temp files)
-├── messages/              # i18n message files
-│   ├── en.sh              # English messages (default)
-│   ├── pt.sh              # Portuguese (Brazilian) messages
-│   ├── es.sh              # Spanish messages
+├── messages/              # i18n message files (JSON format)
+│   ├── en.json            # English messages (default)
+│   ├── pt.json            # Portuguese (Brazilian) messages
+│   ├── es.json            # Spanish messages
 │   └── README.md          # Translation guidelines
 └── tests/
     ├── unit.sh            # Component tests (includes i18n validation)
@@ -492,11 +516,11 @@ Strategy: High precision when available, uniqueness when not.
 
 After installation (~/.claude/):
 ├── statusline.sh           # Deployed script
-├── statusline-config.sh    # User language preference
-└── messages/               # Deployed language files
-    ├── en.sh
-    ├── pt.sh
-    └── es.sh
+├── statusline-config.json  # User preferences (JSON format)
+└── messages/               # Deployed language files (JSON format)
+    ├── en.json
+    ├── pt.json
+    └── es.json
 ```
 
 ## Documentation

@@ -4,13 +4,27 @@ This directory contains translations for the statusline context usage messages.
 
 ## Structure
 
-Each language file (e.g., `en.sh`, `pt.sh`, `es.sh`) defines 5 readonly bash arrays:
+Each language file (e.g., `en.json`, `pt.json`, `es.json`) is a JSON file with the following structure:
 
-- `CONTEXT_MSG_VERY_LOW`: 0-20% context usage (~22 messages)
-- `CONTEXT_MSG_LOW`: 21-40% context usage (~22 messages)
-- `CONTEXT_MSG_MEDIUM`: 41-60% context usage (~23 messages)
-- `CONTEXT_MSG_HIGH`: 61-80% context usage (~24 messages)
-- `CONTEXT_MSG_CRITICAL`: 81-100% context usage (~28 messages)
+```json
+{
+  "language": "en",
+  "display_name": "English",
+  "tiers": {
+    "very_low": ["message1", "message2", ...],
+    "low": ["message1", "message2", ...],
+    "medium": ["message1", "message2", ...],
+    "high": ["message1", "message2", ...],
+    "critical": ["message1", "message2", ...]
+  }
+}
+```
+
+- `very_low`: 0-20% context usage (~22 messages)
+- `low`: 21-40% context usage (~22 messages)
+- `medium`: 41-60% context usage (~23 messages)
+- `high`: 61-80% context usage (~24 messages)
+- `critical`: 81-100% context usage (~28 messages)
 
 ## Translation Guidelines
 
@@ -58,25 +72,36 @@ Messages should follow a thematic escalation:
 
 1. **Copy template**:
    ```bash
-   cp messages/en.sh messages/de.sh
+   cp messages/en.json messages/de.json
    ```
 
-2. **Translate messages**:
-   - Keep array names identical
-   - Translate strings only
+2. **Edit the JSON file**:
+   - Update `"language"` to language code (e.g., "de")
+   - Update `"display_name"` to language name (e.g., "Deutsch")
+   - Translate all messages in each tier array
    - Maintain similar tone/style for each tier
    - Adapt cultural references
 
-3. **Test syntax**:
+3. **Validate JSON**:
    ```bash
-   bash -n messages/de.sh
-   shellcheck messages/de.sh
+   jq empty messages/de.json
    ```
 
-4. **Update install.sh** (around line 330):
+4. **Update installers**:
+
+   **install.sh** (around line 480):
    ```bash
    local available_languages=("en" "pt" "es" "de")
-   local lang_names=("English" "Português" "Español" "Deutsch")
+   ```
+
+   **install.ps1** (around line 308):
+   ```powershell
+   $languages = @(
+       @{ Code = "en"; Name = "English" },
+       @{ Code = "pt"; Name = "Português" },
+       @{ Code = "es"; Name = "Español" },
+       @{ Code = "de"; Name = "Deutsch" }
+   )
    ```
 
 5. **Run tests**:
@@ -85,19 +110,19 @@ Messages should follow a thematic escalation:
    ./tests/integration.sh
    ```
 
-6. **Submit PR** with new language file and install.sh update
+6. **Submit PR** with new language file and installer updates
 
 ## Testing Your Translation
 
 ```bash
-# Test syntax
-bash -n messages/your-lang.sh
+# Validate JSON syntax
+jq empty messages/your-lang.json
 
-# Test with shellcheck
-shellcheck messages/your-lang.sh
-
-# Test integration
-STATUSLINE_LANGUAGE="your-lang" ./tests/integration.sh
+# Test message loading
+echo '{"model":{"display_name":"Test"},"workspace":{"current_dir":"/tmp"},"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":5000}},"cost":{"total_cost_usd":0}}' | \
+  MESSAGES_DIR=./messages \
+  CONFIG_FILE=<(echo "{\"language\":\"your-lang\",\"show_messages\":true,\"show_cost\":true}") \
+  ./statusline.sh
 ```
 
 ## Cultural Adaptation Examples

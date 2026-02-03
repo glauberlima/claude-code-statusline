@@ -13,10 +13,15 @@ sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
 source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
-# Load language messages (required for statusline.sh >= v2.0)
-# Source English messages directly for tests
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/messages/en.sh"
+# Load language messages (required for statusline.sh)
+# MESSAGES_DIR is already set as readonly in sourced statusline.sh
+# shellcheck disable=SC2154  # MESSAGES_DIR is defined in sourced statusline.sh
+if [[ "${MESSAGES_DIR}" != "${SCRIPT_DIR}/messages" ]]; then
+  echo "Warning: MESSAGES_DIR=${MESSAGES_DIR}, expected ${SCRIPT_DIR}/messages"
+fi
+
+# Load messages using the statusline function
+load_language_messages "en"
 
 # Colors are already defined in statusline.sh as readonly
 # RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
@@ -429,21 +434,16 @@ fi
 echo ""
 echo "Testing language file loading..."
 
-# Test: Each language file defines all required arrays
+# Test: Each language file defines all required tiers in JSON
 for lang in en pt es; do
-  lang_file="messages/${lang}.sh"
+  lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Use bash -c to create clean environment (Bash 3.2 compatible: check strings not arrays)
-    if bash -c "source ${lang_file} && \
-       [[ -n \"\${CONTEXT_MSG_VERY_LOW}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_LOW}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_MEDIUM}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_HIGH}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_CRITICAL}\" ]]"; then
+    # Validate JSON structure
+    if jq -e '.tiers.very_low and .tiers.low and .tiers.medium and .tiers.high and .tiers.critical' "${lang_file}" >/dev/null 2>&1; then
       pass "Language file valid: ${lang}"
     else
-      fail "Language file invalid: ${lang}"
+      fail "Language file invalid or missing tiers: ${lang}"
     fi
   else
     fail "Language file missing: ${lang}"
@@ -452,21 +452,21 @@ done
 
 # Test: String size validation (each tier should have 15+ messages in pipe-delimited format)
 for lang in en pt es; do
-  lang_file="messages/${lang}.sh"
+  lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Count messages by counting pipes + 1 (Bash 3.2 compatible)
-    if bash -c "source ${lang_file} && \
-       very_low_count=\$(echo \"\${CONTEXT_MSG_VERY_LOW}\" | tr '|' '\n' | wc -l) && \
-       low_count=\$(echo \"\${CONTEXT_MSG_LOW}\" | tr '|' '\n' | wc -l) && \
-       medium_count=\$(echo \"\${CONTEXT_MSG_MEDIUM}\" | tr '|' '\n' | wc -l) && \
-       high_count=\$(echo \"\${CONTEXT_MSG_HIGH}\" | tr '|' '\n' | wc -l) && \
-       critical_count=\$(echo \"\${CONTEXT_MSG_CRITICAL}\" | tr '|' '\n' | wc -l) && \
-       [[ \${very_low_count} -ge 15 ]] && \
-       [[ \${low_count} -ge 15 ]] && \
-       [[ \${medium_count} -ge 15 ]] && \
-       [[ \${high_count} -ge 15 ]] && \
-       [[ \${critical_count} -ge 15 ]]"; then
+    # Count messages in each tier using jq
+    very_low_count=$(jq '.tiers.very_low | length' "${lang_file}")
+    low_count=$(jq '.tiers.low | length' "${lang_file}")
+    medium_count=$(jq '.tiers.medium | length' "${lang_file}")
+    high_count=$(jq '.tiers.high | length' "${lang_file}")
+    critical_count=$(jq '.tiers.critical | length' "${lang_file}")
+
+    if [[ ${very_low_count} -ge 15 ]] && \
+       [[ ${low_count} -ge 15 ]] && \
+       [[ ${medium_count} -ge 15 ]] && \
+       [[ ${high_count} -ge 15 ]] && \
+       [[ ${critical_count} -ge 15 ]]; then
       pass "Language strings have valid sizes: ${lang}"
     else
       fail "Language strings too small: ${lang}"

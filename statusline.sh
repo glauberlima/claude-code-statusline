@@ -116,6 +116,7 @@ load_json_messages() {
       2) CONTEXT_MSG_MEDIUM="${line}" ;;
       3) CONTEXT_MSG_HIGH="${line}" ;;
       4) CONTEXT_MSG_CRITICAL="${line}" ;;
+      *) ;; # Ignore extra lines
     esac
     ((line_num++)) || true
   done <<< "${json_data}"
