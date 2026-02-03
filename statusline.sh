@@ -47,64 +47,13 @@ readonly BAR_EMPTY="░"
 # Load user configuration
 # Returns: "language|show_messages|show_cost" (pipe-separated)
 load_config() {
-  local config_lang="${DEFAULT_LANGUAGE}"
-  local config_messages="true"  # Default: show
-  local config_cost="true"       # Default: show
   local config_file_json="${CONFIG_FILE%.sh}.json"
 
-  # Try JSON format first (unified format for all platforms)
+  # Load JSON config or use defaults
   if [[ -f "${config_file_json}" ]]; then
-    local json_result
-    json_result=$(jq -r '(.language // "en") + "|" + (.show_messages // true | tostring) + "|" + (.show_cost // true | tostring)' "${config_file_json}" 2>/dev/null)
-    if [[ -n "${json_result}" ]]; then
-      echo "${json_result}"
-      return 0
-    fi
-  fi
-
-  # Fallback to bash format (legacy, will be migrated)
-  if [[ -f "${CONFIG_FILE}" ]]; then
-    # shellcheck source=/dev/null
-    source "${CONFIG_FILE}"
-    config_lang="${STATUSLINE_LANGUAGE:-${DEFAULT_LANGUAGE}}"
-    config_messages="${STATUSLINE_SHOW_MESSAGES:-true}"
-    config_cost="${STATUSLINE_SHOW_COST:-true}"
-
-    # Validate boolean values (security: prevent injection)
-    [[ "${config_messages}" =~ ^(true|false)$ ]] || config_messages="true"
-    [[ "${config_cost}" =~ ^(true|false)$ ]] || config_cost="true"
-
-    # Auto-migrate to JSON format
-    migrate_config_to_json "${config_lang}" "${config_messages}" "${config_cost}"
-  fi
-
-  echo "${config_lang}|${config_messages}|${config_cost}"
-}
-
-# Migrate bash config to JSON format
-migrate_config_to_json() {
-  local lang="$1"
-  local show_messages="$2"
-  local show_cost="$3"
-  local config_file_json="${CONFIG_FILE%.sh}.json"
-
-  # Skip if JSON already exists
-  [[ -f "${config_file_json}" ]] && return 0
-
-  # Create JSON config
-  cat > "${config_file_json}" <<EOF
-{
-  "language": "${lang}",
-  "show_messages": ${show_messages},
-  "show_cost": ${show_cost}
-}
-EOF
-
-  # Backup old config
-  if [[ -f "${CONFIG_FILE}" ]]; then
-    local timestamp
-    timestamp=$(date +%s 2>/dev/null || echo $$)
-    mv "${CONFIG_FILE}" "${CONFIG_FILE}.migrated.${timestamp}" 2>/dev/null || true
+    jq -r '(.language // "en") + "|" + (.show_messages // true | tostring) + "|" + (.show_cost // true | tostring)' "${config_file_json}" 2>/dev/null || echo "en|true|true"
+  else
+    echo "en|true|true"
   fi
 }
 
@@ -114,20 +63,10 @@ EOF
 load_language_messages() {
   local lang="$1"
   local lang_file_json="${MESSAGES_DIR}/${lang}.json"
-  local lang_file_sh="${MESSAGES_DIR}/${lang}.sh"
 
-  # Try JSON format first (unified format)
+  # Try to load JSON file
   if [[ -f "${lang_file_json}" ]]; then
     load_json_messages "${lang_file_json}"
-    return 0
-  fi
-
-  # Try bash format (legacy, will be migrated)
-  if [[ -f "${lang_file_sh}" ]]; then
-    # shellcheck source=/dev/null
-    source "${lang_file_sh}"
-    # Auto-migrate to JSON
-    migrate_messages_to_json "${lang}"
     return 0
   fi
 
@@ -138,7 +77,7 @@ load_language_messages() {
   fi
 
   # Critical failure: no language files found
-  echo "Error: No language file found for ${lang}" >&2
+  echo "Error: Language file not found: ${lang_file_json}" >&2
   exit 1
 }
 
@@ -180,68 +119,6 @@ load_json_messages() {
     esac
     ((line_num++)) || true
   done <<< "${json_data}"
-
-  return 0
-}
-
-# Migrate bash message file to JSON format
-# Args: $1 = language code
-migrate_messages_to_json() {
-  local lang="$1"
-  local sh_file="${MESSAGES_DIR}/${lang}.sh"
-  local json_file="${MESSAGES_DIR}/${lang}.json"
-
-  # Skip if JSON already exists or sh doesn't exist
-  [[ -f "${json_file}" ]] && return 0
-  [[ ! -f "${sh_file}" ]] && return 1
-
-  # Helper function to convert pipe-delimited string to JSON array
-  pipe_to_json_array() {
-    local pipe_string="$1"
-    echo -n '['
-    local first=true
-    local saved_ifs="${IFS}"
-    IFS='|'
-    for item in ${pipe_string}; do
-      [[ "${first}" == "false" ]] && echo -n ','
-      # Use jq to properly escape the string
-      echo -n "$(echo -n "${item}" | jq -R -s .)"
-      first=false
-    done
-    IFS="${saved_ifs}"
-    echo -n ']'
-  }
-
-  # Get display name
-  local display_name
-  case "${lang}" in
-    en) display_name="English" ;;
-    pt) display_name="Português" ;;
-    es) display_name="Español" ;;
-    *) display_name="Unknown" ;;
-  esac
-
-  # Variables are already loaded from source, convert to JSON
-  cat > "${json_file}" <<EOF
-{
-  "language": "${lang}",
-  "display_name": "${display_name}",
-  "tiers": {
-    "very_low": $(pipe_to_json_array "${CONTEXT_MSG_VERY_LOW}"),
-    "low": $(pipe_to_json_array "${CONTEXT_MSG_LOW}"),
-    "medium": $(pipe_to_json_array "${CONTEXT_MSG_MEDIUM}"),
-    "high": $(pipe_to_json_array "${CONTEXT_MSG_HIGH}"),
-    "critical": $(pipe_to_json_array "${CONTEXT_MSG_CRITICAL}")
-  }
-}
-EOF
-
-  # Backup old file
-  if [[ -f "${sh_file}" ]]; then
-    local timestamp
-    timestamp=$(date +%s 2>/dev/null || echo $$)
-    mv "${sh_file}" "${sh_file}.migrated.${timestamp}" 2>/dev/null || true
-  fi
 
   return 0
 }
