@@ -31,66 +31,28 @@ readonly STATE_NOT_REPO="not_repo"
 readonly STATE_CLEAN="clean"
 readonly STATE_DIRTY="dirty"
 
-# i18n configuration
-readonly DEFAULT_LANGUAGE="en"
-readonly CONFIG_FILE="${CONFIG_FILE:-${HOME}/.claude/statusline-config.sh}"
-readonly MESSAGES_DIR="${MESSAGES_DIR:-${HOME}/.claude/messages}"
-
 # Progress bar characters
 readonly BAR_FILLED="█"
 readonly BAR_EMPTY="░"
 
 # ============================================================
-# I18N FUNCTIONS
+# RUNTIME CONFIGURATION (Patched by patch-statusline.sh)
 # ============================================================
+# @CONFIG_START
+readonly SHOW_MESSAGES=true
+readonly SHOW_COST=true
+# @CONFIG_END
 
-# Load user configuration
-# Returns: "language|show_messages|show_cost" (pipe-separated)
-load_config() {
-  local config_lang="${DEFAULT_LANGUAGE}"
-  local config_messages="true"  # Default: show
-  local config_cost="true"       # Default: show
-
-  # Source config if exists
-  if [[ -f "${CONFIG_FILE}" ]]; then
-    # shellcheck source=/dev/null
-    source "${CONFIG_FILE}"
-    config_lang="${STATUSLINE_LANGUAGE:-${DEFAULT_LANGUAGE}}"
-    config_messages="${STATUSLINE_SHOW_MESSAGES:-true}"
-    config_cost="${STATUSLINE_SHOW_COST:-true}"
-
-    # Validate boolean values (security: prevent injection)
-    [[ "${config_messages}" =~ ^(true|false)$ ]] || config_messages="true"
-    [[ "${config_cost}" =~ ^(true|false)$ ]] || config_cost="true"
-  fi
-
-  echo "${config_lang}|${config_messages}|${config_cost}"
-}
-
-# Load language messages
-# Args: $1 = language code
-# Side effect: Sources language file, defines CONTEXT_MSG_* arrays
-load_language_messages() {
-  local lang="$1"
-  local lang_file="${MESSAGES_DIR}/${lang}.sh"
-
-  # Check if language file exists
-  if [[ ! -f "${lang_file}" ]]; then
-    # Fallback to default language
-    lang="${DEFAULT_LANGUAGE}"
-    lang_file="${MESSAGES_DIR}/${lang}.sh"
-  fi
-
-  # Source language file (defines CONTEXT_MSG_* arrays)
-  if [[ -f "${lang_file}" ]]; then
-    # shellcheck source=/dev/null
-    source "${lang_file}"
-  else
-    # Critical failure: default language missing
-    echo "Error: Language file not found: ${lang_file}" >&2
-    exit 1
-  fi
-}
+# ============================================================
+# I18N MESSAGES (Patched by patch-statusline.sh for language)
+# ============================================================
+# @MESSAGES_START
+readonly CONTEXT_MSG_VERY_LOW=("just getting started" "barely touched it" "rookie numbers" "fresh as a daisy" "room for an elephant" "barely scratched the surface" "context? what context?" "zero stress mode" "could do this all day" "warming up the engines" "practically empty" "haven't even started yet" "smooth sailing ahead" "testing the waters" "this will go far" "still cold in here" "didn't break a sweat" "taking it slow" "plenty of runway left" "all systems nominal" "hardly made a dent" "got room to spare")
+readonly CONTEXT_MSG_LOW=("ate and left no crumbs" "light snacking" "taking it easy" "smooth operator" "just vibing" "cruising altitude reached" "sipping not gulping" "nice and steady" "feeling good about this" "like a walk in the park" "barely breaking a sweat" "coasting along nicely" "comfortable cruise" "nibbling around the edges" "hasn't warmed up yet" "too comfortable" "zen mode activated" "this rhythm is good" "feeling just right" "total tranquility" "not bad so far" "looking good")
+readonly CONTEXT_MSG_MEDIUM=("halfway there" "finding the groove" "building momentum" "picking up speed" "getting interesting" "this is where the fun begins" "entering the zone" "momentum is building" "getting warmer" "midpoint madness" "balanced as all things should be" "sweet spot territory" "perfectly balanced" "getting serious now" "halfway walked" "warming the turbines" "started to heat up" "catching rhythm" "starting to feel it" "can feel the weight now" "neither cold nor hot" "this is balanced" "gears are meshing")
+readonly CONTEXT_MSG_HIGH=("getting spicy" "filling up fast" "things are heating up" "now we're talking" "turning up the heat" "entering danger zone" "feeling the pressure" "this is getting real" "approaching the red zone" "intensity rising" "no more mr nice bot" "getting toasty in here" "full throttle mode" "heated up for good" "starting to get hot" "on fire" "cauldron is boiling" "starting to get heavy" "serious now" "sweating bullets" "things getting serious" "here we go" "warming the engine" "hold on tight")
+readonly CONTEXT_MSG_CRITICAL=("living dangerously" "pushing the limits" "houston we have a problem" "danger zone activated" "code like there's no tomorrow" "running on fumes" "this is fine" "spicy spicy spicy" "critical mass approaching" "yolo mode engaged" "no safety net here" "maximum overdrive" "somebody stop me" "pedal to the metal" "context window go brrrr" "on fire now" "at the limit already" "about to explode" "now we're screwed" "limit coming in hot" "someone help please" "going to explode" "all or nothing now" "hold my drink" "burning up already" "this will end badly" "limit is here" "can't take it anymore")
+# @MESSAGES_END
 
 # ============================================================
 # UTILITY FUNCTIONS
@@ -279,64 +241,33 @@ build_progress_bar() {
 }
 
 # Get random context message based on usage percentage
-# Bash 3.2 compatible: uses pipe-delimited strings instead of arrays
+# Bash 3.2 compatible: uses bash arrays
 get_context_message() {
   local percent="$1"
-  local msg_string=""
 
-  # Determine tier and select message string
+  # Determine tier and select message array
   local tier
   tier=$(get_context_tier "${percent}")
 
-  # shellcheck disable=SC2154  # CONTEXT_MSG_* strings sourced from language files
+  # Select array based on tier
+  local messages_array
   case "${tier}" in
-    0) msg_string="${CONTEXT_MSG_VERY_LOW}" ;;
-    1) msg_string="${CONTEXT_MSG_LOW}" ;;
-    2) msg_string="${CONTEXT_MSG_MEDIUM}" ;;
-    3) msg_string="${CONTEXT_MSG_HIGH}" ;;
-    4) msg_string="${CONTEXT_MSG_CRITICAL}" ;;
-    *) msg_string="unknown tier" ;;  # Fallback
+    0) messages_array=("${CONTEXT_MSG_VERY_LOW[@]}") ;;
+    1) messages_array=("${CONTEXT_MSG_LOW[@]}") ;;
+    2) messages_array=("${CONTEXT_MSG_MEDIUM[@]}") ;;
+    3) messages_array=("${CONTEXT_MSG_HIGH[@]}") ;;
+    4) messages_array=("${CONTEXT_MSG_CRITICAL[@]}") ;;
+    *) echo "loading..."; return 0 ;;  # Fallback
   esac
 
-  # Validate non-empty message string
-  if [[ -z "${msg_string}" ]]; then
-    echo "loading..."
-    return 0
-  fi
-
-  # Count messages using IFS
-  local count=0
-  local saved_ifs="${IFS}"
-  IFS='|'
-  for _ in ${msg_string}; do
-    ((count++))
-  done
-  IFS="${saved_ifs}"
-
-  # Protect against division by zero
-  if [[ ${count} -le 0 ]]; then
-    echo "loading..."
-    return 0
-  fi
+  # Get array length and select random index
+  local count=${#messages_array[@]}
+  [[ ${count} -le 0 ]] && echo "loading..." && return 0
 
   # Better distribution (reduces bias for small counts)
   local index=$(( (RANDOM * count) / 32768 ))
 
-  # Extract selected message
-  local i=0
-  IFS='|'
-  for message in ${msg_string}; do
-    if [[ ${i} -eq ${index} ]]; then
-      IFS="${saved_ifs}"
-      echo "${message}"
-      return 0
-    fi
-    ((i++))
-  done
-  IFS="${saved_ifs}"
-
-  # Fallback (should never reach)
-  echo "loading..."
+  echo "${messages_array[${index}]}"
 }
 
 # ============================================================
@@ -537,7 +468,6 @@ build_model_component() {
 build_context_component() {
   local context_size="$1"
   local current_usage="$2"
-  local show_messages="${3:-true}"  # Default true for backwards compat
 
   # Calculate percentage with division-by-zero protection
   # Reorder arithmetic: multiply first, then divide (prevents division by zero when context_size < 100)
@@ -563,9 +493,9 @@ build_context_component() {
   local size_formatted
   size_formatted=$(format_number "${context_size}")
 
-  # Build message part conditionally
+  # Build message part conditionally (read from global SHOW_MESSAGES)
   local message_part=""
-  if [[ "${show_messages}" == "true" ]]; then
+  if [[ "${SHOW_MESSAGES}" == "true" ]]; then
     local message
     message=$(get_context_message "${context_percent}")
 
@@ -632,16 +562,16 @@ build_files_component() {
 
 build_cost_component() {
   local cost_usd="$1"
-  local show_cost="${2:-true}"  # Default true for backwards compat
 
-  # Early return if disabled
-  [[ "${show_cost}" != "true" ]] && return
+  # Early return if disabled (read from global SHOW_COST)
+  [[ "${SHOW_COST}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
   if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-      echo "💰 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
+      # Use LC_NUMERIC=C to ensure decimal point (not comma) for printf on Windows
+      echo "💰 ${GREEN}\$$(LC_NUMERIC=C printf "%.2f" "${cost_usd}")${NC}"
     fi
   fi
 }
@@ -694,17 +624,8 @@ main() {
     exit 1
   }
 
-  # Load configuration and language messages
-  local user_config show_messages show_cost
-  user_config=$(load_config)
-
-  # Parse config: "language|show_messages|show_cost"
-  local user_language saved_ifs
-  saved_ifs="${IFS}"
-  IFS='|' read -r user_language show_messages show_cost <<< "${user_config}"
-  IFS="${saved_ifs}"
-
-  load_language_messages "${user_language}"
+  # Configuration is now hardcoded via @CONFIG_START block
+  # Messages are hardcoded via @MESSAGES_START block
 
   # Check if stdin is a TTY (not piped input)
   if [[ -t 0 ]]; then
@@ -757,21 +678,28 @@ main() {
 ${parsed}
 EOF
 
-  # Build components (pass toggle flags)
+  # Strip carriage returns (Windows line endings compatibility)
+  model_name="${model_name%$'\r'}"
+  current_dir="${current_dir%$'\r'}"
+  context_size="${context_size%$'\r'}"
+  current_usage="${current_usage%$'\r'}"
+  cost_usd="${cost_usd%$'\r'}"
+
+  # Build components (read toggle flags from global constants)
   local model_part context_part dir_part git_part cost_part files_part
   model_part=$(build_model_component "${model_name}")
-  context_part=$(build_context_component "${context_size}" "${current_usage}" "${show_messages}")
+  context_part=$(build_context_component "${context_size}" "${current_usage}")
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"
-  local git_with_files file_count
+  local git_with_files file_count saved_ifs
   git_with_files=$(build_git_component "${current_dir}")
   saved_ifs="${IFS}"
   IFS='|' read -r git_part file_count <<< "${git_with_files}"
   IFS="${saved_ifs}"
 
   files_part=$(build_files_component "${file_count}")
-  cost_part=$(build_cost_component "${cost_usd}" "${show_cost}")
+  cost_part=$(build_cost_component "${cost_usd}")
 
   # Assemble and output (no lines_part)
   assemble_statusline "${model_part}" "${context_part}" "${dir_part}" "${git_part}" "${files_part}" "${cost_part}"

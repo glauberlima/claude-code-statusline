@@ -48,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 ### Change Language or Toggle Components
 
-Run the installer again:
+**Option 1: Use the installer** (recommended for initial setup):
 
 ```bash
 ./install.sh
@@ -58,6 +58,21 @@ The installer lets you:
 - Select language (🇺🇸 English | 🇧🇷 Português | 🇪🇸 Español)
 - Enable/disable context messages
 - Enable/disable cost display
+
+**Option 2: Use the patch script** (for manual customization):
+
+```bash
+# Patch to Portuguese with all features
+./patch-statusline.sh ~/.claude/statusline.sh messages/pt.json
+
+# Disable messages
+./patch-statusline.sh ~/.claude/statusline.sh --no-messages
+
+# Spanish with cost tracking only
+./patch-statusline.sh ~/.claude/statusline.sh messages/es.json --no-messages
+```
+
+The patch script creates a fully optimized, static version with zero runtime overhead. To change settings, re-run the patch.
 
 ### Add a Language
 

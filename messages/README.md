@@ -4,13 +4,26 @@ This directory contains translations for the statusline context usage messages.
 
 ## Structure
 
-Each language file (e.g., `en.sh`, `pt.sh`, `es.sh`) defines 5 readonly bash arrays:
+Each language file (e.g., `en.json`, `pt.json`, `es.json`) is a JSON file with a **simplified structure**:
 
-- `CONTEXT_MSG_VERY_LOW`: 0-20% context usage (~22 messages)
-- `CONTEXT_MSG_LOW`: 21-40% context usage (~22 messages)
-- `CONTEXT_MSG_MEDIUM`: 41-60% context usage (~23 messages)
-- `CONTEXT_MSG_HIGH`: 61-80% context usage (~24 messages)
-- `CONTEXT_MSG_CRITICAL`: 81-100% context usage (~28 messages)
+```json
+{
+  "very_low": ["message1", "message2", ...],
+  "low": ["message1", "message2", ...],
+  "medium": ["message1", "message2", ...],
+  "high": ["message1", "message2", ...],
+  "critical": ["message1", "message2", ...]
+}
+```
+
+**Tier meanings**:
+- `very_low`: 0-20% context usage (~22 messages)
+- `low`: 21-40% context usage (~22 messages)
+- `medium`: 41-60% context usage (~23 messages)
+- `high`: 61-80% context usage (~24 messages)
+- `critical`: 81-100% context usage (~28 messages)
+
+**Note**: Metadata fields (`language`, `display_name`) and `tiers` nesting have been removed for simplicity.
 
 ## Translation Guidelines
 
@@ -58,46 +71,65 @@ Messages should follow a thematic escalation:
 
 1. **Copy template**:
    ```bash
-   cp messages/en.sh messages/de.sh
+   cp messages/en.json messages/de.json
    ```
 
-2. **Translate messages**:
-   - Keep array names identical
-   - Translate strings only
+2. **Edit the JSON file**:
+   - Translate all messages in each tier array
    - Maintain similar tone/style for each tier
    - Adapt cultural references
+   - Keep the simplified structure (no metadata fields)
 
-3. **Test syntax**:
+3. **Validate JSON**:
    ```bash
-   bash -n messages/de.sh
-   shellcheck messages/de.sh
+   jq empty messages/de.json
    ```
 
-4. **Update install.sh** (around line 330):
+4. **Test patching**:
+   ```bash
+   ./patch-statusline.sh statusline.sh messages/de.json
+   ```
+
+5. **Update installers** (optional, if using install.sh):
+
+   **install.sh** (around line 480):
    ```bash
    local available_languages=("en" "pt" "es" "de")
-   local lang_names=("English" "Português" "Español" "Deutsch")
    ```
 
-5. **Run tests**:
+   **install.ps1** (around line 308):
+   ```powershell
+   $languages = @(
+       @{ Code = "en"; Name = "English" },
+       @{ Code = "pt"; Name = "Português" },
+       @{ Code = "es"; Name = "Español" },
+       @{ Code = "de"; Name = "Deutsch" }
+   )
+   ```
+
+6. **Run tests**:
    ```bash
    ./tests/unit.sh
    ./tests/integration.sh
    ```
 
-6. **Submit PR** with new language file and install.sh update
+7. **Submit PR** with new language file and installer updates
 
 ## Testing Your Translation
 
 ```bash
-# Test syntax
-bash -n messages/your-lang.sh
+# Validate JSON syntax
+jq empty messages/your-lang.json
 
-# Test with shellcheck
-shellcheck messages/your-lang.sh
+# Patch statusline with your language
+cp statusline.sh statusline-test.sh
+./patch-statusline.sh statusline-test.sh messages/your-lang.json
 
-# Test integration
-STATUSLINE_LANGUAGE="your-lang" ./tests/integration.sh
+# Test with sample input
+echo '{"model":{"display_name":"Test"},"workspace":{"current_dir":"/tmp"},"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":5000}},"cost":{"total_cost_usd":0}}' | ./statusline-test.sh
+
+# Cleanup
+rm statusline-test.sh
 ```
 
 ## Cultural Adaptation Examples
@@ -111,47 +143,24 @@ STATUSLINE_LANGUAGE="your-lang" ./tests/integration.sh
 - "hold my drink" → "sostén mi bebida" (direct translation)
 - "yolo mode activated" → "modo yolo activado" (YOLO is universal)
 
-## File Format
+## How Patching Works
 
+The `patch-statusline.sh` script:
+1. Reads your JSON language file
+2. Converts JSON arrays to bash arrays using `jq @sh` (proper escaping)
+3. Replaces the `@MESSAGES_START` / `@MESSAGES_END` block in statusline.sh
+4. Creates a fully static script with your language hardcoded
+
+Example transformation:
+```json
+{
+  "very_low": ["just getting started", "barely touched it"]
+}
+```
+
+Becomes:
 ```bash
-#!/usr/bin/env bash
-# [Language Name] messages for statusline
-# DO NOT execute directly - sourced by statusline.sh
-
-# Tier 0: Very low usage (0-20%)
-readonly CONTEXT_MSG_VERY_LOW=(
-  "message 1"
-  "message 2"
-  # ...
-)
-
-# Tier 1: Low usage (21-40%)
-readonly CONTEXT_MSG_LOW=(
-  "message 1"
-  "message 2"
-  # ...
-)
-
-# Tier 2: Medium usage (41-60%)
-readonly CONTEXT_MSG_MEDIUM=(
-  "message 1"
-  "message 2"
-  # ...
-)
-
-# Tier 3: High usage (61-80%)
-readonly CONTEXT_MSG_HIGH=(
-  "message 1"
-  "message 2"
-  # ...
-)
-
-# Tier 4: Critical usage (81-100%)
-readonly CONTEXT_MSG_CRITICAL=(
-  "message 1"
-  "message 2"
-  # ...
-)
+readonly CONTEXT_MSG_VERY_LOW=('just getting started' 'barely touched it')
 ```
 
 ## Language Codes

@@ -21,6 +21,7 @@ TOTAL=0
 run_test() {
   local test_name="$1"
   local json_input="$2"
+  local expected_substring="${3:-}"  # Optional third parameter
 
   TOTAL=$((TOTAL + 1))
 
@@ -28,14 +29,28 @@ run_test() {
   local exit_code=0
   output=$(echo "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
 
-  if [[ ${exit_code} -eq 0 ]]; then
-    echo -e "${GREEN}✓${NC} ${test_name}"
-    PASSED=$((PASSED + 1))
-  else
+  if [[ ${exit_code} -ne 0 ]]; then
     echo -e "${RED}✗${NC} ${test_name}"
     echo "  Exit code: ${exit_code}"
     echo "  Output: ${output}"
     FAILED=$((FAILED + 1))
+    return 0
+  fi
+
+  # If expected substring provided, verify it exists in output
+  if [[ -n "${expected_substring}" ]]; then
+    if echo "${output}" | grep -q "${expected_substring}"; then
+      echo -e "${GREEN}✓${NC} ${test_name}"
+      PASSED=$((PASSED + 1))
+    else
+      echo -e "${RED}✗${NC} ${test_name} (missing expected content)"
+      echo "  Expected substring: ${expected_substring}"
+      echo "  Actual output: ${output}"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    echo -e "${GREEN}✓${NC} ${test_name}"
+    PASSED=$((PASSED + 1))
   fi
 
   return 0  # Always return 0 to prevent set -e from exiting script early
@@ -99,7 +114,7 @@ main() {
       "total_lines_added": 156,
       "total_lines_removed": 23
     }
-  }'
+  }' "Opus"
 
   # Test 2: Over 100% context usage (should clamp to 100%)
   run_test "Over-limit context (150% -> should clamp to 100%)" '{
@@ -167,6 +182,15 @@ main() {
       "context_window_size": 200000
     }
   }'
+
+  # Fixture-Based Tests
+  echo ""
+  echo -e "${YELLOW}=== Fixture-Based Tests ===${NC}"
+
+  # Test 8: Fixture test (validates checked-in fixture)
+  local fixture_content
+  fixture_content=$(cat "${SCRIPT_DIR}/tests/fixtures/test-input.json")
+  run_test "Fixture: test-input.json" "${fixture_content}" "Test Model"
 
   # Security Tests
   echo ""
