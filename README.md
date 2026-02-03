@@ -1,8 +1,10 @@
-# Claude Code Statusline
+<p align="center">
+  <img src="assets/statusline-logo.png" alt="Claude Code Statusline" width="500">
+</p>
 
 > Ridiculously simple. Surprisingly rich.
 
-![Claude Code Statusline Demo](statusline-demo.png)
+![Claude Code Statusline Demo](assets/statusline-demo.png)
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20MinGW-blue?style=for-the-badge" alt="Platform support" />
