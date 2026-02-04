@@ -673,7 +673,8 @@ build_cost_component() {
   if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-      echo "💰 ${GREEN}\$$(printf "%.2f" "${cost_usd}")${NC}"
+      # Use LC_NUMERIC=C to ensure decimal point (not comma) for printf on Windows
+      echo "💰 ${GREEN}\$$(LC_NUMERIC=C printf "%.2f" "${cost_usd}")${NC}"
     fi
   fi
 }
@@ -788,6 +789,13 @@ main() {
   } << EOF
 ${parsed}
 EOF
+
+  # Strip carriage returns (Windows line endings compatibility)
+  model_name="${model_name%$'\r'}"
+  current_dir="${current_dir%$'\r'}"
+  context_size="${context_size%$'\r'}"
+  current_usage="${current_usage%$'\r'}"
+  cost_usd="${cost_usd%$'\r'}"
 
   # Build components (pass toggle flags)
   local model_part context_part dir_part git_part cost_part files_part
