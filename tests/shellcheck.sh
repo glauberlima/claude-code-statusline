@@ -19,10 +19,7 @@ FAILED=0
 # All scripts to check
 FILES=(
   "${SCRIPT_DIR}/statusline.sh"
-  "${SCRIPT_DIR}/install.sh"
-  "${SCRIPT_DIR}/messages/en.sh"
-  "${SCRIPT_DIR}/messages/pt.sh"
-  "${SCRIPT_DIR}/messages/es.sh"
+  "${SCRIPT_DIR}/patch-statusline.sh"
   "${SCRIPT_DIR}/tests/unit.sh"
   "${SCRIPT_DIR}/tests/integration.sh"
   "${SCRIPT_DIR}/tests/shellcheck.sh"

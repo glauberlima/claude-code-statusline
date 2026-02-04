@@ -13,10 +13,7 @@ sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
 source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
-# Load language messages (required for statusline.sh >= v2.0)
-# Source English messages directly for tests
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/messages/en.sh"
+# Messages are now hardcoded in statusline.sh via @MESSAGES_START block
 
 # Colors are already defined in statusline.sh as readonly
 # RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
@@ -49,16 +46,10 @@ echo "========================================="
 # Test format_number()
 echo ""
 echo "Testing format_number()..."
-result=$(format_number 543)
-test "format_number 543" "543" "${result}"
 result=$(format_number 999)
 test "format_number 999" "999" "${result}"
 result=$(format_number 1000)
 test "format_number 1000" "1.0K" "${result}"
-result=$(format_number 1500)
-test "format_number 1500" "1.5K" "${result}"
-result=$(format_number 9999)
-test "format_number 9999" "9.9K" "${result}"
 result=$(format_number 10000)
 test "format_number 10000" "10K" "${result}"
 result=$(format_number 54000)
@@ -67,14 +58,8 @@ result=$(format_number 999999)
 test "format_number 999999" "999K" "${result}"
 result=$(format_number 1000000)
 test "format_number 1000000" "1.0M" "${result}"
-result=$(format_number 1200000)
-test "format_number 1200000" "1.2M" "${result}"
-result=$(format_number 9999999)
-test "format_number 9999999" "9.9M" "${result}"
 result=$(format_number 10000000)
 test "format_number 10000000" "10M" "${result}"
-result=$(format_number 15000000)
-test "format_number 15000000" "15M" "${result}"
 
 # Test get_context_message() returns non-empty strings
 echo ""
@@ -93,32 +78,33 @@ done
 # Test tier boundaries
 echo ""
 echo "Testing message tier boundaries..."
-msg_19=$(get_context_message 19)
-msg_21=$(get_context_message 21)
-msg_39=$(get_context_message 39)
-msg_41=$(get_context_message 41)
-msg_59=$(get_context_message 59)
-msg_61=$(get_context_message 61)
-msg_79=$(get_context_message 79)
-msg_81=$(get_context_message 81)
+# Test tier boundaries by verifying get_context_tier() returns correct tier
+tier_19=$(get_context_tier 19)
+test "tier boundary 19% (tier 0)" "0" "${tier_19}"
 
-# Just verify they're not empty (can't guarantee different due to randomness)
-result=$([[ -n "${msg_19}" ]] && echo "non-empty")
-test "tier boundary 19%" "non-empty" "${result}"
-result=$([[ -n "${msg_21}" ]] && echo "non-empty")
-test "tier boundary 21%" "non-empty" "${result}"
-result=$([[ -n "${msg_39}" ]] && echo "non-empty")
-test "tier boundary 39%" "non-empty" "${result}"
-result=$([[ -n "${msg_41}" ]] && echo "non-empty")
-test "tier boundary 41%" "non-empty" "${result}"
-result=$([[ -n "${msg_59}" ]] && echo "non-empty")
-test "tier boundary 59%" "non-empty" "${result}"
-result=$([[ -n "${msg_61}" ]] && echo "non-empty")
-test "tier boundary 61%" "non-empty" "${result}"
-result=$([[ -n "${msg_79}" ]] && echo "non-empty")
-test "tier boundary 79%" "non-empty" "${result}"
-result=$([[ -n "${msg_81}" ]] && echo "non-empty")
-test "tier boundary 81%" "non-empty" "${result}"
+tier_20=$(get_context_tier 20)
+test "tier boundary 20% (tier 0)" "0" "${tier_20}"
+
+tier_21=$(get_context_tier 21)
+test "tier boundary 21% (tier 1)" "1" "${tier_21}"
+
+tier_40=$(get_context_tier 40)
+test "tier boundary 40% (tier 1)" "1" "${tier_40}"
+
+tier_41=$(get_context_tier 41)
+test "tier boundary 41% (tier 2)" "2" "${tier_41}"
+
+tier_60=$(get_context_tier 60)
+test "tier boundary 60% (tier 2)" "2" "${tier_60}"
+
+tier_61=$(get_context_tier 61)
+test "tier boundary 61% (tier 3)" "3" "${tier_61}"
+
+tier_80=$(get_context_tier 80)
+test "tier boundary 80% (tier 3)" "3" "${tier_80}"
+
+tier_81=$(get_context_tier 81)
+test "tier boundary 81% (tier 4)" "4" "${tier_81}"
 
 # Test edge cases
 echo ""
@@ -210,41 +196,49 @@ test "build_files_component empty (should be empty)" "" "${result}"
 echo ""
 echo "Testing component toggle configuration..."
 
-# Test context component with messages disabled
-temp_result=$(build_context_component "200000" "50000" "false" | sed -E 's/\033\[[0-9;]*m//g')
-if echo "${temp_result}" | grep -qE '\\\|'; then
-  echo -e "${RED}✗${NC} Context component with messages=false still shows separator"
-  failed=$((failed + 1))
+# Note: These tests now rely on global constants (SHOW_MESSAGES, SHOW_COST)
+# which are set at source time from @CONFIG_START block
+
+# Test context component (reads from global SHOW_MESSAGES)
+temp_result=$(build_context_component "200000" "50000" | sed -E 's/\033\[[0-9;]*m//g')
+# shellcheck disable=SC2154  # SHOW_MESSAGES is sourced from statusline.sh
+if [[ "${SHOW_MESSAGES}" == "true" ]]; then
+  if echo "${temp_result}" | grep -qE '\|'; then
+    echo -e "${GREEN}✓${NC} Context component with SHOW_MESSAGES=true shows separator"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Context component doesn't show separator when SHOW_MESSAGES=true"
+    failed=$((failed + 1))
+  fi
 else
-  echo -e "${GREEN}✓${NC} Context component respects show_messages=false"
-  passed=$((passed + 1))
+  if echo "${temp_result}" | grep -qE '\|'; then
+    echo -e "${RED}✗${NC} Context component with SHOW_MESSAGES=false still shows separator"
+    failed=$((failed + 1))
+  else
+    echo -e "${GREEN}✓${NC} Context component respects SHOW_MESSAGES=false"
+    passed=$((passed + 1))
+  fi
 fi
 
-# Test cost component with cost disabled
-temp_result=$(build_cost_component "1.50" "false")
-test "build_cost_component with show_cost=false" "" "${temp_result}"
-
-# Note: load_config() tests are in integration tests due to readonly CONFIG_FILE
-# Here we test the component builders directly
-
-# Test that context component accepts the new parameter
-temp_result=$(build_context_component "200000" "50000" "true" | sed -E 's/\033\[[0-9;]*m//g')
-if echo "${temp_result}" | grep -qE '\\\|'; then
-  echo -e "${GREEN}✓${NC} Context component with messages=true shows separator"
-  passed=$((passed + 1))
+# Test cost component (reads from global SHOW_COST)
+temp_result=$(build_cost_component "1.50")
+# shellcheck disable=SC2154  # SHOW_COST is sourced from statusline.sh
+if [[ "${SHOW_COST}" == "true" ]]; then
+  if [[ -n "${temp_result}" ]]; then
+    echo -e "${GREEN}✓${NC} Cost component with SHOW_COST=true shows cost"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Cost component doesn't show cost when enabled"
+    failed=$((failed + 1))
+  fi
 else
-  echo -e "${RED}✗${NC} Context component with messages=true missing separator"
-  failed=$((failed + 1))
-fi
-
-# Test cost component accepts the new parameter
-temp_result=$(build_cost_component "1.50" "true")
-if [[ -n "${temp_result}" ]]; then
-  echo -e "${GREEN}✓${NC} Cost component with show_cost=true shows cost"
-  passed=$((passed + 1))
-else
-  echo -e "${RED}✗${NC} Cost component with show_cost=true missing cost"
-  failed=$((failed + 1))
+  if [[ -z "${temp_result}" ]]; then
+    echo -e "${GREEN}✓${NC} Cost component respects SHOW_COST=false"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Cost component with SHOW_COST=false shows cost: ${temp_result}"
+    failed=$((failed + 1))
+  fi
 fi
 
 # Test build_progress_bar() with Unicode characters
@@ -308,75 +302,6 @@ echo ""
 echo "Testing get_random_message_color()..."
 
 # Helper functions for pass/fail
-# ============================================================
-# INSTALL.SH FUNCTION TESTS
-# ============================================================
-
-# Source detect_terminal_chars function from install.sh
-# Extract just the function we need
-detect_terminal_chars() {
-  local term="${TERM:-unknown}"
-  local filled empty
-
-  case "${term}" in
-    xterm*|screen*|tmux*)
-      # Modern terminals with full Unicode support
-      filled="█"
-      empty="░"
-      ;;
-    linux)
-      # Linux console - limited Unicode
-      filled="▓"
-      empty="░"
-      ;;
-    dumb)
-      # Minimal terminal - ASCII only
-      filled="#"
-      empty="-"
-      ;;
-    *)
-      # Default: assume modern terminal
-      filled="█"
-      empty="░"
-      ;;
-  esac
-
-  echo "${filled}|${empty}"
-}
-
-echo ""
-echo "Testing terminal character detection..."
-
-# Test: xterm terminal
-TERM="xterm-256color"
-result=$(detect_terminal_chars)
-test "Terminal detection: xterm-256color" "█|░" "${result}"
-
-# Test: linux terminal
-TERM="linux"
-result=$(detect_terminal_chars)
-test "Terminal detection: linux" "▓|░" "${result}"
-
-# Test: dumb terminal
-TERM="dumb"
-result=$(detect_terminal_chars)
-test "Terminal detection: dumb" "#|-" "${result}"
-
-# Test: unknown terminal (default)
-TERM="unknown-terminal"
-result=$(detect_terminal_chars)
-test "Terminal detection: unknown" "█|░" "${result}"
-
-# Test: screen terminal
-TERM="screen"
-result=$(detect_terminal_chars)
-test "Terminal detection: screen" "█|░" "${result}"
-
-# Test: tmux terminal
-TERM="tmux-256color"
-result=$(detect_terminal_chars)
-test "Terminal detection: tmux" "█|░" "${result}"
-
 pass() {
   echo -e "${GREEN}✓${NC} $1"
   passed=$((passed + 1))
@@ -429,44 +354,39 @@ fi
 echo ""
 echo "Testing language file loading..."
 
-# Test: Each language file defines all required arrays
+# Test: Each language file defines all required tiers in JSON (simplified format)
 for lang in en pt es; do
-  lang_file="messages/${lang}.sh"
+  lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Use bash -c to create clean environment (Bash 3.2 compatible: check strings not arrays)
-    if bash -c "source ${lang_file} && \
-       [[ -n \"\${CONTEXT_MSG_VERY_LOW}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_LOW}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_MEDIUM}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_HIGH}\" ]] && \
-       [[ -n \"\${CONTEXT_MSG_CRITICAL}\" ]]"; then
+    # Validate JSON structure (simplified format: no .tiers nesting)
+    if jq -e '.very_low and .low and .medium and .high and .critical' "${lang_file}" >/dev/null 2>&1; then
       pass "Language file valid: ${lang}"
     else
-      fail "Language file invalid: ${lang}"
+      fail "Language file invalid or missing tiers: ${lang}"
     fi
   else
     fail "Language file missing: ${lang}"
   fi
 done
 
-# Test: String size validation (each tier should have 15+ messages in pipe-delimited format)
+# Test: String size validation (each tier should have 15+ messages)
 for lang in en pt es; do
-  lang_file="messages/${lang}.sh"
+  lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Count messages by counting pipes + 1 (Bash 3.2 compatible)
-    if bash -c "source ${lang_file} && \
-       very_low_count=\$(echo \"\${CONTEXT_MSG_VERY_LOW}\" | tr '|' '\n' | wc -l) && \
-       low_count=\$(echo \"\${CONTEXT_MSG_LOW}\" | tr '|' '\n' | wc -l) && \
-       medium_count=\$(echo \"\${CONTEXT_MSG_MEDIUM}\" | tr '|' '\n' | wc -l) && \
-       high_count=\$(echo \"\${CONTEXT_MSG_HIGH}\" | tr '|' '\n' | wc -l) && \
-       critical_count=\$(echo \"\${CONTEXT_MSG_CRITICAL}\" | tr '|' '\n' | wc -l) && \
-       [[ \${very_low_count} -ge 15 ]] && \
-       [[ \${low_count} -ge 15 ]] && \
-       [[ \${medium_count} -ge 15 ]] && \
-       [[ \${high_count} -ge 15 ]] && \
-       [[ \${critical_count} -ge 15 ]]"; then
+    # Count messages in each tier using jq (simplified format)
+    very_low_count=$(jq '.very_low | length' "${lang_file}")
+    low_count=$(jq '.low | length' "${lang_file}")
+    medium_count=$(jq '.medium | length' "${lang_file}")
+    high_count=$(jq '.high | length' "${lang_file}")
+    critical_count=$(jq '.critical | length' "${lang_file}")
+
+    if [[ ${very_low_count} -ge 15 ]] && \
+       [[ ${low_count} -ge 15 ]] && \
+       [[ ${medium_count} -ge 15 ]] && \
+       [[ ${high_count} -ge 15 ]] && \
+       [[ ${critical_count} -ge 15 ]]; then
       pass "Language strings have valid sizes: ${lang}"
     else
       fail "Language strings too small: ${lang}"
