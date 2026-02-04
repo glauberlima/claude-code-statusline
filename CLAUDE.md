@@ -111,37 +111,33 @@ This porcelain v2 format requires **git 2.11+** (Dec 2016).
 
 ### Architecture
 
-The statusline supports multiple languages through a JSON-based message system:
+The statusline uses a **static patching system** for zero-runtime overhead:
 
 ```
-install.sh/install.ps1 → prompts user → saves choice
-                ↓
-~/.claude/statusline-config.json {"language": "pt", ...}
-                ↓
-statusline.sh main() → load_config() → load_language_messages()
-                ↓
-~/.claude/messages/pt.json (JSON with tier arrays)
-                ↓
-load_json_messages() → converts to pipe-delimited format
-                ↓
-get_context_message() (random selection from appropriate tier)
+statusline.sh (English default)
+        ↓
+patch-statusline.sh + messages/pt.json
+        ↓
+statusline.sh (Portuguese, fully static)
 ```
+
+**Key points**:
+- Messages hardcoded in `statusline.sh` via `@MESSAGES_START` / `@MESSAGES_END` markers
+- Configuration flags (`SHOW_MESSAGES`, `SHOW_COST`) hardcoded via `@CONFIG_START` / `@CONFIG_END` markers
+- `patch-statusline.sh` script replaces marker blocks to create optimized versions
+- **Zero runtime overhead** - no config loading, no JSON parsing during execution
 
 ### Language Files Structure
 
-Each language file (`messages/{lang}.json`) is a JSON file with this structure:
+Each language file (`messages/{lang}.json`) uses a simplified format:
 
 ```json
 {
-  "language": "en",
-  "display_name": "English",
-  "tiers": {
-    "very_low": ["message1", "message2", ...],
-    "low": ["message1", "message2", ...],
-    "medium": ["message1", "message2", ...],
-    "high": ["message1", "message2", ...],
-    "critical": ["message1", "message2", ...]
-  }
+  "very_low": ["message1", "message2", ...],
+  "low": ["message1", "message2", ...],
+  "medium": ["message1", "message2", ...],
+  "high": ["message1", "message2", ...],
+  "critical": ["message1", "message2", ...]
 }
 ```
 
@@ -157,41 +153,47 @@ Each language file (`messages/{lang}.json`) is a JSON file with this structure:
 - Portuguese (pt) - Brazilian Portuguese with cultural adaptation
 - Spanish (es) - Spanish
 
+### Patching System
+
+**`patch-statusline.sh`** - Build-time patching tool:
+
+```bash
+# Patch to Portuguese
+./patch-statusline.sh statusline.sh messages/pt.json
+
+# Disable messages
+./patch-statusline.sh statusline.sh --no-messages
+
+# Disable both messages and cost
+./patch-statusline.sh statusline.sh --no-messages --no-cost
+```
+
+**How it works**:
+1. Reads JSON messages with `jq`
+2. Uses `jq @sh` for safe shell escaping
+3. Replaces `@CONFIG_START` block with new flags
+4. Replaces `@MESSAGES_START` block with bash arrays
+5. Validates output with `bash -n`
+6. Writes in-place
+
+**Performance**: Eliminates 3-5ms runtime overhead (from ~100ms to ~95ms).
+
 ### Key Functions
 
-**`load_config()`** (statusline.sh):
-- Reads `~/.claude/statusline-config.json` if exists
-- Parses JSON with jq
-- Returns "language|show_messages|show_cost" format
-- Performance: ~2ms (jq parse)
+**`get_context_message()`** (statusline.sh):
+- Selects random message from appropriate tier
+- Uses bash arrays (not pipe-delimited strings)
+- Reads from hardcoded `CONTEXT_MSG_*` arrays
+- Performance: <1ms (array access)
 
-**`load_language_messages()`** (statusline.sh):
-- Takes language code as argument
-- Calls `load_json_messages()` with JSON file path
-- Falls back to "en" if language file missing
-- Performance: ~3-5ms (jq parse + conversion)
+**`build_context_component()`** (statusline.sh):
+- Reads global `SHOW_MESSAGES` constant
+- Shows/hides messages based on flag
+- No parameters for configuration
 
-**`load_json_messages()`** (statusline.sh):
-- Parses JSON file with jq
-- Converts JSON arrays to pipe-delimited strings
-- Defines `CONTEXT_MSG_*` variables in parent scope
-- Single jq call for efficiency
-
-**`prompt_language_selection()`** (install.sh/install.ps1):
-- Interactive menu with 3 language options
-- Uses stderr for UI, stdout for return value
-- Validates selection, defaults to "en"
-- Saves choice to `statusline-config.json`
-
-### Fallback Strategy
-
-```
-1. User's configured language (~/.claude/statusline-config.json)
-   ↓ if file doesn't exist
-2. DEFAULT_LANGUAGE="en"
-   ↓ if en.json doesn't exist
-3. Exit 1 with error (critical failure)
-```
+**`build_cost_component()`** (statusline.sh):
+- Reads global `SHOW_COST` constant
+- Early return if disabled
 
 ### Translation Guidelines
 
@@ -205,12 +207,12 @@ See `messages/README.md` for complete translation guidelines.
 ### Adding a New Language
 
 1. Create `messages/de.json` (copy from `messages/en.json`)
-2. Update `"language"` and `"display_name"` fields
-3. Translate all messages in tier arrays
-4. Validate: `jq empty messages/de.json`
+2. Translate all messages in tier arrays
+3. Validate: `jq empty messages/de.json`
+4. Test patch: `./patch-statusline.sh statusline.sh messages/de.json`
 5. Update installers to include "de" in available languages
-5. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
-6. Update this documentation
+6. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
+7. Update this documentation
 
 ## Code Style Guidelines
 
@@ -367,22 +369,21 @@ yum install jq git
 
 ## Performance Targets
 
-- Total execution: < 100ms
+- Total execution: < 95ms (improved from ~100ms)
 - Git operations: < 50ms
 - JSON parsing: < 10ms
-- **i18n overhead: ~3-5ms** (config load + message file source)
+- **i18n overhead: 0ms** (fully static, no runtime loading)
 
-**i18n Performance Breakdown**:
-- `load_config()`: <1ms (source single config file)
-- `load_language_messages()`: 2-3ms (source and define 5 arrays with ~120 messages)
-- Negligible impact on overall performance (<5% of total budget)
+**Performance improvement**:
+- Eliminated 3-5ms runtime overhead through static patching
+- Messages hardcoded as bash arrays (direct access)
+- No config file reading or JSON parsing at runtime
 
 If slow, check:
 
 1. Git repo size (large repos increase operation time)
 2. Number of modified files (affects status parsing)
 3. jq query complexity (keep single parse)
-4. **Language file size** (should be <5KB per file)
 
 ## Common Patterns
 
@@ -451,11 +452,11 @@ append_if() {
 The codebase contains several fallback mechanisms for robustness and compatibility:
 
 ### Language Configuration
-- **Primary**: User's configured language (`~/.claude/statusline-config.sh`)
-- **Fallback 1**: `DEFAULT_LANGUAGE` ("en")
-- **Fallback 2**: Exit with error if en.sh missing
+- **Default**: English messages hardcoded in `statusline.sh`
+- **Customization**: Use `patch-statusline.sh` with desired language JSON
+- **No runtime fallback**: Language is statically compiled into the script
 
-Strategy: Graceful degradation to English, hard failure only if system is critically broken.
+Strategy: User explicitly chooses language via patching. No dynamic loading or fallback needed.
 
 ### JSON Parsing (statusline.sh)
 Uses jq's `//` operator for null-safe defaults:
@@ -495,32 +496,31 @@ Strategy: High precision when available, uniqueness when not.
 
 ```
 /
-├── statusline.sh          # Main implementation (~680 lines)
+├── statusline.sh          # Main implementation (~650 lines, includes hardcoded English)
+├── patch-statusline.sh    # Build-time patching tool
 ├── install.sh             # Unix installer script
 ├── install.ps1            # Windows PowerShell installer
 ├── README.md              # User-facing documentation
 ├── .shellcheckrc          # Linter config (all checks enabled)
 ├── .editorconfig          # Code style enforcement
 ├── .gitignore             # Excluded files (IDE tools, temp files)
-├── messages/              # i18n message files (JSON format)
-│   ├── en.json            # English messages (default)
+├── docs/
+│   └── plans/             # Design documents
+│       └── 2026-02-04-static-message-patching-design.md
+├── messages/              # i18n message files (simplified JSON format)
+│   ├── en.json            # English messages
 │   ├── pt.json            # Portuguese (Brazilian) messages
 │   ├── es.json            # Spanish messages
 │   └── README.md          # Translation guidelines
 └── tests/
-    ├── unit.sh            # Component tests (includes i18n validation)
-    ├── integration.sh     # End-to-end tests (includes language config tests)
-    ├── shellcheck.sh      # Static analysis (checks messages/*.sh)
+    ├── unit.sh            # Component tests (76 tests)
+    ├── integration.sh     # End-to-end tests (24 tests)
+    ├── shellcheck.sh      # Static analysis
     └── fixtures/
         └── test-input.json # Sample JSON input
 
 After installation (~/.claude/):
-├── statusline.sh           # Deployed script
-├── statusline-config.json  # User preferences (JSON format)
-└── messages/               # Deployed language files (JSON format)
-    ├── en.json
-    ├── pt.json
-    └── es.json
+└── statusline.sh           # Deployed script (patched with user's language/config)
 ```
 
 ## Documentation
