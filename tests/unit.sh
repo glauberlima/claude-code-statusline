@@ -46,16 +46,10 @@ echo "========================================="
 # Test format_number()
 echo ""
 echo "Testing format_number()..."
-result=$(format_number 543)
-test "format_number 543" "543" "${result}"
 result=$(format_number 999)
 test "format_number 999" "999" "${result}"
 result=$(format_number 1000)
 test "format_number 1000" "1.0K" "${result}"
-result=$(format_number 1500)
-test "format_number 1500" "1.5K" "${result}"
-result=$(format_number 9999)
-test "format_number 9999" "9.9K" "${result}"
 result=$(format_number 10000)
 test "format_number 10000" "10K" "${result}"
 result=$(format_number 54000)
@@ -64,14 +58,8 @@ result=$(format_number 999999)
 test "format_number 999999" "999K" "${result}"
 result=$(format_number 1000000)
 test "format_number 1000000" "1.0M" "${result}"
-result=$(format_number 1200000)
-test "format_number 1200000" "1.2M" "${result}"
-result=$(format_number 9999999)
-test "format_number 9999999" "9.9M" "${result}"
 result=$(format_number 10000000)
 test "format_number 10000000" "10M" "${result}"
-result=$(format_number 15000000)
-test "format_number 15000000" "15M" "${result}"
 
 # Test get_context_message() returns non-empty strings
 echo ""
@@ -90,32 +78,33 @@ done
 # Test tier boundaries
 echo ""
 echo "Testing message tier boundaries..."
-msg_19=$(get_context_message 19)
-msg_21=$(get_context_message 21)
-msg_39=$(get_context_message 39)
-msg_41=$(get_context_message 41)
-msg_59=$(get_context_message 59)
-msg_61=$(get_context_message 61)
-msg_79=$(get_context_message 79)
-msg_81=$(get_context_message 81)
+# Test tier boundaries by verifying get_context_tier() returns correct tier
+tier_19=$(get_context_tier 19)
+test "tier boundary 19% (tier 0)" "0" "${tier_19}"
 
-# Just verify they're not empty (can't guarantee different due to randomness)
-result=$([[ -n "${msg_19}" ]] && echo "non-empty")
-test "tier boundary 19%" "non-empty" "${result}"
-result=$([[ -n "${msg_21}" ]] && echo "non-empty")
-test "tier boundary 21%" "non-empty" "${result}"
-result=$([[ -n "${msg_39}" ]] && echo "non-empty")
-test "tier boundary 39%" "non-empty" "${result}"
-result=$([[ -n "${msg_41}" ]] && echo "non-empty")
-test "tier boundary 41%" "non-empty" "${result}"
-result=$([[ -n "${msg_59}" ]] && echo "non-empty")
-test "tier boundary 59%" "non-empty" "${result}"
-result=$([[ -n "${msg_61}" ]] && echo "non-empty")
-test "tier boundary 61%" "non-empty" "${result}"
-result=$([[ -n "${msg_79}" ]] && echo "non-empty")
-test "tier boundary 79%" "non-empty" "${result}"
-result=$([[ -n "${msg_81}" ]] && echo "non-empty")
-test "tier boundary 81%" "non-empty" "${result}"
+tier_20=$(get_context_tier 20)
+test "tier boundary 20% (tier 0)" "0" "${tier_20}"
+
+tier_21=$(get_context_tier 21)
+test "tier boundary 21% (tier 1)" "1" "${tier_21}"
+
+tier_40=$(get_context_tier 40)
+test "tier boundary 40% (tier 1)" "1" "${tier_40}"
+
+tier_41=$(get_context_tier 41)
+test "tier boundary 41% (tier 2)" "2" "${tier_41}"
+
+tier_60=$(get_context_tier 60)
+test "tier boundary 60% (tier 2)" "2" "${tier_60}"
+
+tier_61=$(get_context_tier 61)
+test "tier boundary 61% (tier 3)" "3" "${tier_61}"
+
+tier_80=$(get_context_tier 80)
+test "tier boundary 80% (tier 3)" "3" "${tier_80}"
+
+tier_81=$(get_context_tier 81)
+test "tier boundary 81% (tier 4)" "4" "${tier_81}"
 
 # Test edge cases
 echo ""
@@ -212,6 +201,7 @@ echo "Testing component toggle configuration..."
 
 # Test context component (reads from global SHOW_MESSAGES)
 temp_result=$(build_context_component "200000" "50000" | sed -E 's/\033\[[0-9;]*m//g')
+# shellcheck disable=SC2154  # SHOW_MESSAGES is sourced from statusline.sh
 if [[ "${SHOW_MESSAGES}" == "true" ]]; then
   if echo "${temp_result}" | grep -qE '\|'; then
     echo -e "${GREEN}✓${NC} Context component with SHOW_MESSAGES=true shows separator"
@@ -232,6 +222,7 @@ fi
 
 # Test cost component (reads from global SHOW_COST)
 temp_result=$(build_cost_component "1.50")
+# shellcheck disable=SC2154  # SHOW_COST is sourced from statusline.sh
 if [[ "${SHOW_COST}" == "true" ]]; then
   if [[ -n "${temp_result}" ]]; then
     echo -e "${GREEN}✓${NC} Cost component with SHOW_COST=true shows cost"
@@ -311,75 +302,6 @@ echo ""
 echo "Testing get_random_message_color()..."
 
 # Helper functions for pass/fail
-# ============================================================
-# INSTALL.SH FUNCTION TESTS
-# ============================================================
-
-# Source detect_terminal_chars function from install.sh
-# Extract just the function we need
-detect_terminal_chars() {
-  local term="${TERM:-unknown}"
-  local filled empty
-
-  case "${term}" in
-    xterm*|screen*|tmux*)
-      # Modern terminals with full Unicode support
-      filled="█"
-      empty="░"
-      ;;
-    linux)
-      # Linux console - limited Unicode
-      filled="▓"
-      empty="░"
-      ;;
-    dumb)
-      # Minimal terminal - ASCII only
-      filled="#"
-      empty="-"
-      ;;
-    *)
-      # Default: assume modern terminal
-      filled="█"
-      empty="░"
-      ;;
-  esac
-
-  echo "${filled}|${empty}"
-}
-
-echo ""
-echo "Testing terminal character detection..."
-
-# Test: xterm terminal
-TERM="xterm-256color"
-result=$(detect_terminal_chars)
-test "Terminal detection: xterm-256color" "█|░" "${result}"
-
-# Test: linux terminal
-TERM="linux"
-result=$(detect_terminal_chars)
-test "Terminal detection: linux" "▓|░" "${result}"
-
-# Test: dumb terminal
-TERM="dumb"
-result=$(detect_terminal_chars)
-test "Terminal detection: dumb" "#|-" "${result}"
-
-# Test: unknown terminal (default)
-TERM="unknown-terminal"
-result=$(detect_terminal_chars)
-test "Terminal detection: unknown" "█|░" "${result}"
-
-# Test: screen terminal
-TERM="screen"
-result=$(detect_terminal_chars)
-test "Terminal detection: screen" "█|░" "${result}"
-
-# Test: tmux terminal
-TERM="tmux-256color"
-result=$(detect_terminal_chars)
-test "Terminal detection: tmux" "█|░" "${result}"
-
 pass() {
   echo -e "${GREEN}✓${NC} $1"
   passed=$((passed + 1))

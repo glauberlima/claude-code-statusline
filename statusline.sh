@@ -267,7 +267,7 @@ get_context_message() {
   # Better distribution (reduces bias for small counts)
   local index=$(( (RANDOM * count) / 32768 ))
 
-  echo "${messages_array[$index]}"
+  echo "${messages_array[${index}]}"
 }
 
 # ============================================================

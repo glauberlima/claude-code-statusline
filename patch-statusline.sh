@@ -49,8 +49,10 @@ replace_config_block() {
   sed -n '1,/@CONFIG_START/p' "${file}" > "${temp_file}"
 
   # Insert new config
-  echo "readonly SHOW_MESSAGES=${show_messages}" >> "${temp_file}"
-  echo "readonly SHOW_COST=${show_cost}" >> "${temp_file}"
+  {
+    echo "readonly SHOW_MESSAGES=${show_messages}"
+    echo "readonly SHOW_COST=${show_cost}"
+  } >> "${temp_file}"
 
   # Extract everything from @CONFIG_END onwards (inclusive)
   sed -n '/@CONFIG_END/,$p' "${file}" >> "${temp_file}"
@@ -81,11 +83,13 @@ replace_messages_block() {
   sed -n '1,/@MESSAGES_START/p' "${file}" > "${temp_file}"
 
   # Insert new arrays (no quotes around ${var} since jq @sh already quoted)
-  echo "readonly CONTEXT_MSG_VERY_LOW=(${very_low})" >> "${temp_file}"
-  echo "readonly CONTEXT_MSG_LOW=(${low})" >> "${temp_file}"
-  echo "readonly CONTEXT_MSG_MEDIUM=(${medium})" >> "${temp_file}"
-  echo "readonly CONTEXT_MSG_HIGH=(${high})" >> "${temp_file}"
-  echo "readonly CONTEXT_MSG_CRITICAL=(${critical})" >> "${temp_file}"
+  {
+    echo "readonly CONTEXT_MSG_VERY_LOW=(${very_low})"
+    echo "readonly CONTEXT_MSG_LOW=(${low})"
+    echo "readonly CONTEXT_MSG_MEDIUM=(${medium})"
+    echo "readonly CONTEXT_MSG_HIGH=(${high})"
+    echo "readonly CONTEXT_MSG_CRITICAL=(${critical})"
+  } >> "${temp_file}"
 
   # Extract from marker onwards
   sed -n '/@MESSAGES_END/,$p' "${file}" >> "${temp_file}"
@@ -116,7 +120,7 @@ main() {
   # Parse remaining args
   shift
   for arg in "$@"; do
-    case "$arg" in
+    case "${arg}" in
       --no-messages)
         show_messages=false
         ;;
@@ -124,14 +128,14 @@ main() {
         show_cost=false
         ;;
       *.json)
-        language_json="$arg"
+        language_json="${arg}"
         ;;
       -h|--help)
         show_usage
         exit 0
         ;;
       *)
-        echo "Error: Unknown argument: $arg" >&2
+        echo "Error: Unknown argument: ${arg}" >&2
         show_usage
         exit 1
         ;;
