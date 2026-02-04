@@ -55,6 +55,9 @@ replace_config_block() {
   # Extract everything from @CONFIG_END onwards (inclusive)
   sed -n '/@CONFIG_END/,$p' "${file}" >> "${temp_file}"
 
+  # Preserve original file permissions
+  chmod --reference="${file}" "${temp_file}" 2>/dev/null || chmod +x "${temp_file}"
+
   mv "${temp_file}" "${file}"
 }
 
@@ -86,6 +89,9 @@ replace_messages_block() {
 
   # Extract from marker onwards
   sed -n '/@MESSAGES_END/,$p' "${file}" >> "${temp_file}"
+
+  # Preserve original file permissions
+  chmod --reference="${file}" "${temp_file}" 2>/dev/null || chmod +x "${temp_file}"
 
   mv "${temp_file}" "${file}"
 }
