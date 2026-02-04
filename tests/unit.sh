@@ -6,10 +6,6 @@ set -euo pipefail
 # Source the statusline functions by extracting everything except the main call
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Set MESSAGES_DIR before sourcing (it will be made readonly during source)
-export MESSAGES_DIR="${SCRIPT_DIR}/messages"
-export CONFIG_FILE="${SCRIPT_DIR}/.test-config"
-
 # Create a temporary file with statusline functions (remove last line which calls main)
 TEMP_FILE=$(mktemp)
 sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
@@ -17,8 +13,7 @@ sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
 source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
-# Load language messages (required for statusline.sh)
-load_language_messages "en"
+# Messages are now hardcoded in statusline.sh via @MESSAGES_START block
 
 # Colors are already defined in statusline.sh as readonly
 # RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
@@ -212,41 +207,47 @@ test "build_files_component empty (should be empty)" "" "${result}"
 echo ""
 echo "Testing component toggle configuration..."
 
-# Test context component with messages disabled
-temp_result=$(build_context_component "200000" "50000" "false" | sed -E 's/\033\[[0-9;]*m//g')
-if echo "${temp_result}" | grep -qE '\\\|'; then
-  echo -e "${RED}✗${NC} Context component with messages=false still shows separator"
-  failed=$((failed + 1))
+# Note: These tests now rely on global constants (SHOW_MESSAGES, SHOW_COST)
+# which are set at source time from @CONFIG_START block
+
+# Test context component (reads from global SHOW_MESSAGES)
+temp_result=$(build_context_component "200000" "50000" | sed -E 's/\033\[[0-9;]*m//g')
+if [[ "${SHOW_MESSAGES}" == "true" ]]; then
+  if echo "${temp_result}" | grep -qE '\|'; then
+    echo -e "${GREEN}✓${NC} Context component with SHOW_MESSAGES=true shows separator"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Context component doesn't show separator when SHOW_MESSAGES=true"
+    failed=$((failed + 1))
+  fi
 else
-  echo -e "${GREEN}✓${NC} Context component respects show_messages=false"
-  passed=$((passed + 1))
+  if echo "${temp_result}" | grep -qE '\|'; then
+    echo -e "${RED}✗${NC} Context component with SHOW_MESSAGES=false still shows separator"
+    failed=$((failed + 1))
+  else
+    echo -e "${GREEN}✓${NC} Context component respects SHOW_MESSAGES=false"
+    passed=$((passed + 1))
+  fi
 fi
 
-# Test cost component with cost disabled
-temp_result=$(build_cost_component "1.50" "false")
-test "build_cost_component with show_cost=false" "" "${temp_result}"
-
-# Note: load_config() tests are in integration tests due to readonly CONFIG_FILE
-# Here we test the component builders directly
-
-# Test that context component accepts the new parameter
-temp_result=$(build_context_component "200000" "50000" "true" | sed -E 's/\033\[[0-9;]*m//g')
-if echo "${temp_result}" | grep -qE '\\\|'; then
-  echo -e "${GREEN}✓${NC} Context component with messages=true shows separator"
-  passed=$((passed + 1))
+# Test cost component (reads from global SHOW_COST)
+temp_result=$(build_cost_component "1.50")
+if [[ "${SHOW_COST}" == "true" ]]; then
+  if [[ -n "${temp_result}" ]]; then
+    echo -e "${GREEN}✓${NC} Cost component with SHOW_COST=true shows cost"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Cost component doesn't show cost when enabled"
+    failed=$((failed + 1))
+  fi
 else
-  echo -e "${RED}✗${NC} Context component with messages=true missing separator"
-  failed=$((failed + 1))
-fi
-
-# Test cost component accepts the new parameter
-temp_result=$(build_cost_component "1.50" "true")
-if [[ -n "${temp_result}" ]]; then
-  echo -e "${GREEN}✓${NC} Cost component with show_cost=true shows cost"
-  passed=$((passed + 1))
-else
-  echo -e "${RED}✗${NC} Cost component with show_cost=true missing cost"
-  failed=$((failed + 1))
+  if [[ -z "${temp_result}" ]]; then
+    echo -e "${GREEN}✓${NC} Cost component respects SHOW_COST=false"
+    passed=$((passed + 1))
+  else
+    echo -e "${RED}✗${NC} Cost component with SHOW_COST=false shows cost: ${temp_result}"
+    failed=$((failed + 1))
+  fi
 fi
 
 # Test build_progress_bar() with Unicode characters
@@ -431,13 +432,13 @@ fi
 echo ""
 echo "Testing language file loading..."
 
-# Test: Each language file defines all required tiers in JSON
+# Test: Each language file defines all required tiers in JSON (simplified format)
 for lang in en pt es; do
   lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Validate JSON structure
-    if jq -e '.tiers.very_low and .tiers.low and .tiers.medium and .tiers.high and .tiers.critical' "${lang_file}" >/dev/null 2>&1; then
+    # Validate JSON structure (simplified format: no .tiers nesting)
+    if jq -e '.very_low and .low and .medium and .high and .critical' "${lang_file}" >/dev/null 2>&1; then
       pass "Language file valid: ${lang}"
     else
       fail "Language file invalid or missing tiers: ${lang}"
@@ -447,17 +448,17 @@ for lang in en pt es; do
   fi
 done
 
-# Test: String size validation (each tier should have 15+ messages in pipe-delimited format)
+# Test: String size validation (each tier should have 15+ messages)
 for lang in en pt es; do
   lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Count messages in each tier using jq
-    very_low_count=$(jq '.tiers.very_low | length' "${lang_file}")
-    low_count=$(jq '.tiers.low | length' "${lang_file}")
-    medium_count=$(jq '.tiers.medium | length' "${lang_file}")
-    high_count=$(jq '.tiers.high | length' "${lang_file}")
-    critical_count=$(jq '.tiers.critical | length' "${lang_file}")
+    # Count messages in each tier using jq (simplified format)
+    very_low_count=$(jq '.very_low | length' "${lang_file}")
+    low_count=$(jq '.low | length' "${lang_file}")
+    medium_count=$(jq '.medium | length' "${lang_file}")
+    high_count=$(jq '.high | length' "${lang_file}")
+    critical_count=$(jq '.critical | length' "${lang_file}")
 
     if [[ ${very_low_count} -ge 15 ]] && \
        [[ ${low_count} -ge 15 ]] && \
