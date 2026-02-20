@@ -20,6 +20,7 @@ FAILED=0
 FILES=(
   "${SCRIPT_DIR}/statusline.sh"
   "${SCRIPT_DIR}/patch-statusline.sh"
+  "${SCRIPT_DIR}/install.sh"
   "${SCRIPT_DIR}/tests/unit.sh"
   "${SCRIPT_DIR}/tests/integration.sh"
   "${SCRIPT_DIR}/tests/shellcheck.sh"

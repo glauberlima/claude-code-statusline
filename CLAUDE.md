@@ -210,7 +210,7 @@ See `messages/README.md` for complete translation guidelines.
 2. Translate all messages in tier arrays
 3. Validate: `jq empty messages/de.json`
 4. Test patch: `./patch-statusline.sh statusline.sh messages/de.json`
-5. Update installers to include "de" in available languages
+5. Add "de" to the `available_languages` array in `install.sh` (`prompt_language_selection` function)
 6. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
 7. Update this documentation
 
@@ -499,22 +499,18 @@ Strategy: High precision when available, uniqueness when not.
 ├── statusline.sh          # Main implementation (~650 lines, includes hardcoded English)
 ├── patch-statusline.sh    # Build-time patching tool
 ├── install.sh             # Unix installer script
-├── install.ps1            # Windows PowerShell installer
 ├── README.md              # User-facing documentation
 ├── .shellcheckrc          # Linter config (all checks enabled)
 ├── .editorconfig          # Code style enforcement
 ├── .gitignore             # Excluded files (IDE tools, temp files)
-├── docs/
-│   └── plans/             # Design documents
-│       └── 2026-02-04-static-message-patching-design.md
 ├── messages/              # i18n message files (simplified JSON format)
 │   ├── en.json            # English messages
 │   ├── pt.json            # Portuguese (Brazilian) messages
 │   ├── es.json            # Spanish messages
 │   └── README.md          # Translation guidelines
 └── tests/
-    ├── unit.sh            # Component tests (76 tests)
-    ├── integration.sh     # End-to-end tests (24 tests)
+    ├── unit.sh            # Component tests
+    ├── integration.sh     # End-to-end tests
     ├── shellcheck.sh      # Static analysis
     └── fixtures/
         └── test-input.json # Sample JSON input
