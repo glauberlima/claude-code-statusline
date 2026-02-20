@@ -38,7 +38,7 @@ INSTALL_MODE="local"
 # Utility Functions
 # ============================================================================
 
-is_piped() { [[ ! -t 0 ]]; }
+is_piped() { [[ ! -t 1 ]]; }
 
 is_wsl() {
   [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
