@@ -43,6 +43,16 @@ echo "========================================="
 echo "Unit Tests for statusline.sh"
 echo "========================================="
 
+# Test get_dirname()
+echo ""
+echo "Testing get_dirname()..."
+result=$(get_dirname "/home/user/my-project")
+test "get_dirname unix path" "my-project" "${result}"
+result=$(get_dirname 'C:\projetos\meu-projeto')
+test "get_dirname windows path (MINGW)" "meu-projeto" "${result}"
+result=$(get_dirname 'C:/projetos/meu-projeto')
+test "get_dirname windows forward slashes" "meu-projeto" "${result}"
+
 # Test format_number()
 echo ""
 echo "Testing format_number()..."

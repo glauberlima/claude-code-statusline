@@ -59,7 +59,7 @@ readonly CONTEXT_MSG_CRITICAL=('living dangerously' 'pushing the limits' 'housto
 # ============================================================
 
 # String utilities
-get_dirname() { echo "${1##*/}"; }
+get_dirname() { local p="${1//\\//}"; echo "${p##*/}"; }
 sep() { echo -n " ${SEPARATOR} "; }
 
 # Conditional append helper (DRY pattern)
