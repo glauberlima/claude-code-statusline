@@ -44,20 +44,6 @@ is_wsl() {
   [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
-download_with_retry() {
-  local url="$1"
-  local dest="$2"
-  local attempt=1
-
-  while [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]]; do
-    if curl -fsSL "${url}" -o "${dest}" 2>/dev/null; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]] && sleep 1
-  done
-  return 1
-}
 
 cleanup_temp() {
   [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]] && rm -rf "${TEMP_DIR}"
@@ -134,12 +120,11 @@ check_bash_version() {
 }
 
 generate_timestamp() {
-  # shellcheck disable=SC2312
-  date +%s%N 2>/dev/null || echo "$(date +%s).$$"
+  date +%s%N 2>/dev/null || date +%s
 }
 
 extract_version() {
-  local -r cmd="$1"
+  local cmd="$1"
   "${cmd}" --version 2>/dev/null | grep -oE '[0-9.]+' | head -n1 || echo 'found'
 }
 
@@ -178,15 +163,14 @@ check_dependencies() {
     return 1
   fi
 
+  local v_curl v_claude v_node v_git
+  v_curl=$(extract_version curl); v_claude=$(extract_version claude)
+  v_node=$(extract_version node); v_git=$(extract_version git)
   success "bash ${BASH_VERSION}"
-  # shellcheck disable=SC2312
-  success "curl $(extract_version curl)"
-  # shellcheck disable=SC2312
-  success "claude $(extract_version claude)"
-  # shellcheck disable=SC2312
-  success "node $(extract_version node)"
-  # shellcheck disable=SC2312
-  success "git $(extract_version git)"
+  success "curl ${v_curl}"
+  success "claude ${v_claude}"
+  success "node ${v_node}"
+  success "git ${v_git}"
   # shellcheck disable=SC2310
   is_wsl && muted "  Detected: WSL environment"
 
@@ -194,7 +178,7 @@ check_dependencies() {
 }
 
 show_install_instructions() {
-  local -r deps=("$@")
+  local deps=("$@")
   local platform
   # shellcheck disable=SC2312
   platform=$(uname -s 2>/dev/null || echo "Unknown")
@@ -244,11 +228,19 @@ show_install_instructions() {
 }
 
 download_file() {
-  local -r url="$1"
-  local -r dest="$2"
+  local url="$1"
+  local dest="$2"
+  local attempt=1
 
-  # shellcheck disable=SC2310
-  if ! download_with_retry "${url}" "${dest}"; then
+  while [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]]; do
+    if curl -fsSL "${url}" -o "${dest}" 2>/dev/null; then
+      break
+    fi
+    attempt=$((attempt + 1))
+    [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]] && sleep 1
+  done
+
+  if [[ ${attempt} -gt ${MAX_DOWNLOAD_RETRIES} ]]; then
     error "Failed to download from ${url}"
     echo "  ${ARROW} Check your internet connection and try again" >&2
     return 1
@@ -262,7 +254,7 @@ download_file() {
 }
 
 validate_file() {
-  local -r file="$1"
+  local file="$1"
 
   if [[ ! -s "${file}" ]]; then
     error "File does not exist or is empty"
@@ -438,7 +430,7 @@ prompt_component_selection() {
 # ============================================================================
 
 install_statusline() {
-  local -r source="$1"
+  local source="$1"
   local backup=""
 
   if [[ ! -d "${TARGET_DIR}" ]]; then
@@ -471,7 +463,7 @@ install_statusline() {
 }
 
 configure_settings() {
-  local -r settings_dir="${HOME}/.claude"
+  local settings_dir="${HOME}/.claude"
   local temp_file backup_file
 
   mkdir -p "${settings_dir}" || { error "Cannot create ${settings_dir}"; return 1; }

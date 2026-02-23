@@ -37,38 +37,34 @@ show_usage() {
   echo "  $0 statusline.sh messages/es.json --no-cost"
 }
 
+# Shared helper: replace the block between start_marker and end_marker in file
+# with new_content (pre-built string), then atomically overwrite file.
+_replace_marker_block() {
+  local file="$1" start_marker="$2" end_marker="$3" new_content="$4"
+  local tmp
+  tmp=$(mktemp)
+  sed -n "1,/${start_marker}/p" "${file}" > "${tmp}"
+  printf '%s\n' "${new_content}" >> "${tmp}"
+  sed -n "/${end_marker}/,\$p" "${file}" >> "${tmp}"
+  chmod +x "${tmp}"
+  mv "${tmp}" "${file}"
+}
+
 # Replace @CONFIG_START to @CONFIG_END block
 replace_config_block() {
   local file="$1"
   local show_messages="$2"
   local show_cost="$3"
-  local temp_file
-  temp_file=$(mktemp)
-
-  # Extract everything before @CONFIG_START (inclusive)
-  sed -n '1,/@CONFIG_START/p' "${file}" > "${temp_file}"
-
-  # Insert new config
-  {
-    echo "readonly SHOW_MESSAGES=${show_messages}"
-    echo "readonly SHOW_COST=${show_cost}"
-  } >> "${temp_file}"
-
-  # Extract everything from @CONFIG_END onwards (inclusive)
-  sed -n '/@CONFIG_END/,$p' "${file}" >> "${temp_file}"
-
-  # Preserve original file permissions
-  chmod --reference="${file}" "${temp_file}" 2>/dev/null || chmod +x "${temp_file}"
-
-  mv "${temp_file}" "${file}"
+  local content
+  content="readonly SHOW_MESSAGES=${show_messages}
+readonly SHOW_COST=${show_cost}"
+  _replace_marker_block "${file}" '@CONFIG_START' '@CONFIG_END' "${content}"
 }
 
 # Replace @MESSAGES_START to @MESSAGES_END block
 replace_messages_block() {
   local file="$1"
   local json_file="$2"
-  local temp_file
-  temp_file=$(mktemp)
 
   # Single node call extracts all 5 tiers, one per output line.
   # Replicates jq's @sh: wraps each string in single quotes, escaping ' as '\''
@@ -83,7 +79,6 @@ replace_messages_block() {
     });
   " "${json_file}") || {
     echo "Error: Failed to extract messages from ${json_file}" >&2
-    rm -f "${temp_file}"
     return 1
   }
 
@@ -95,25 +90,14 @@ replace_messages_block() {
     IFS= read -r critical
   } <<< "${tier_output}"
 
-  # Extract before marker
-  sed -n '1,/@MESSAGES_START/p' "${file}" > "${temp_file}"
+  local content
+  content="readonly CONTEXT_MSG_VERY_LOW=(${very_low})
+readonly CONTEXT_MSG_LOW=(${low})
+readonly CONTEXT_MSG_MEDIUM=(${medium})
+readonly CONTEXT_MSG_HIGH=(${high})
+readonly CONTEXT_MSG_CRITICAL=(${critical})"
 
-  # Insert new arrays (no quotes around ${var} since shell-quoting already applied)
-  {
-    echo "readonly CONTEXT_MSG_VERY_LOW=(${very_low})"
-    echo "readonly CONTEXT_MSG_LOW=(${low})"
-    echo "readonly CONTEXT_MSG_MEDIUM=(${medium})"
-    echo "readonly CONTEXT_MSG_HIGH=(${high})"
-    echo "readonly CONTEXT_MSG_CRITICAL=(${critical})"
-  } >> "${temp_file}"
-
-  # Extract from marker onwards
-  sed -n '/@MESSAGES_END/,$p' "${file}" >> "${temp_file}"
-
-  # Preserve original file permissions
-  chmod --reference="${file}" "${temp_file}" 2>/dev/null || chmod +x "${temp_file}"
-
-  mv "${temp_file}" "${file}"
+  _replace_marker_block "${file}" '@MESSAGES_START' '@MESSAGES_END' "${content}"
 }
 
 # ============================================================
