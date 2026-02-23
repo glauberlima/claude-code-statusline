@@ -70,19 +70,35 @@ replace_messages_block() {
   local temp_file
   temp_file=$(mktemp)
 
-  # Extract arrays from JSON using jq
-  # jq's @sh format provides proper shell escaping
-  local very_low low medium high critical
-  very_low=$(jq -r '.very_low | map(@sh) | join(" ")' "${json_file}")
-  low=$(jq -r '.low | map(@sh) | join(" ")' "${json_file}")
-  medium=$(jq -r '.medium | map(@sh) | join(" ")' "${json_file}")
-  high=$(jq -r '.high | map(@sh) | join(" ")' "${json_file}")
-  critical=$(jq -r '.critical | map(@sh) | join(" ")' "${json_file}")
+  # Single node call extracts all 5 tiers, one per output line.
+  # Replicates jq's @sh: wraps each string in single quotes, escaping ' as '\''
+  # Path passed via process.argv to avoid shell injection from special chars in path.
+  local tier_output very_low low medium high critical
+  tier_output=$(node -e "
+    var f = process.argv[process.argv.length - 1];
+    var d = JSON.parse(require('fs').readFileSync(f, 'utf8'));
+    var q = function(s) { return \"'\" + s.replace(/'/g, \"'\\\\''\" ) + \"'\"; };
+    ['very_low','low','medium','high','critical'].forEach(function(t) {
+      process.stdout.write(d[t].map(q).join(' ') + '\n');
+    });
+  " "${json_file}") || {
+    echo "Error: Failed to extract messages from ${json_file}" >&2
+    rm -f "${temp_file}"
+    return 1
+  }
+
+  {
+    IFS= read -r very_low
+    IFS= read -r low
+    IFS= read -r medium
+    IFS= read -r high
+    IFS= read -r critical
+  } <<< "${tier_output}"
 
   # Extract before marker
   sed -n '1,/@MESSAGES_START/p' "${file}" > "${temp_file}"
 
-  # Insert new arrays (no quotes around ${var} since jq @sh already quoted)
+  # Insert new arrays (no quotes around ${var} since shell-quoting already applied)
   {
     echo "readonly CONTEXT_MSG_VERY_LOW=(${very_low})"
     echo "readonly CONTEXT_MSG_LOW=(${low})"
@@ -154,10 +170,10 @@ main() {
     exit 1
   fi
 
-  # Check jq dependency
-  command -v jq >/dev/null 2>&1 || {
-    echo "Error: jq is required but not installed" >&2
-    echo "Install: brew install jq (macOS) or apt-get install jq (Linux)" >&2
+  # Check node dependency (required for JSON parsing)
+  command -v node >/dev/null 2>&1 || {
+    echo "Error: node is required but not installed" >&2
+    echo "Install Node.js from https://nodejs.org" >&2
     exit 1
   }
 
@@ -181,7 +197,8 @@ main() {
   # 2. Replace MESSAGES block (if language JSON provided)
   if [[ -n "${language_json}" ]]; then
     # Validate JSON syntax
-    if ! jq empty "${language_json}" 2>/dev/null; then
+    if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
+         "${language_json}" 2>/dev/null; then
       echo "Error: Invalid JSON in ${language_json}" >&2
       exit 1
     fi

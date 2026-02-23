@@ -359,8 +359,11 @@ for lang in en pt es; do
   lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Validate JSON structure (simplified format: no .tiers nesting)
-    if jq -e '.very_low and .low and .medium and .high and .critical' "${lang_file}" >/dev/null 2>&1; then
+    # Validate JSON structure using node (JSON.parse for correctness)
+    if node -e "
+      var d = JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'));
+      if (!d.very_low || !d.low || !d.medium || !d.high || !d.critical) process.exit(1);
+    " "${lang_file}" 2>/dev/null; then
       pass "Language file valid: ${lang}"
     else
       fail "Language file invalid or missing tiers: ${lang}"
@@ -375,12 +378,22 @@ for lang in en pt es; do
   lang_file="messages/${lang}.json"
 
   if [[ -f "${lang_file}" ]]; then
-    # Count messages in each tier using jq (simplified format)
-    very_low_count=$(jq '.very_low | length' "${lang_file}")
-    low_count=$(jq '.low | length' "${lang_file}")
-    medium_count=$(jq '.medium | length' "${lang_file}")
-    high_count=$(jq '.high | length' "${lang_file}")
-    critical_count=$(jq '.critical | length' "${lang_file}")
+    # Count messages in each tier using node (single call for all tiers)
+    tier_counts=$(node -e "
+      var d = JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'));
+      ['very_low','low','medium','high','critical'].forEach(function(t) {
+        process.stdout.write(d[t].length + '\n');
+      });
+    " "${lang_file}" 2>/dev/null)
+
+    very_low_count="" low_count="" medium_count="" high_count="" critical_count=""
+    {
+      IFS= read -r very_low_count
+      IFS= read -r low_count
+      IFS= read -r medium_count
+      IFS= read -r high_count
+      IFS= read -r critical_count
+    } <<< "${tier_counts}"
 
     if [[ ${very_low_count} -ge 15 ]] && \
        [[ ${low_count} -ge 15 ]] && \

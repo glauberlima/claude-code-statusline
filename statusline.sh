@@ -181,17 +181,104 @@ get_context_tier() {
 parse_claude_input() {
   local input="$1"
 
+  # Single awk call replaces jq. Three helper functions handle nested JSON:
+  #   obj_content: extracts the content of { } for a given key (depth-tracked, string-aware)
+  #   str_val:     extracts a string value for a key from a JSON fragment
+  #   num_val:     extracts a numeric value for a key from a JSON fragment
   local parsed
-  parsed=$(echo "${input}" | jq -r '
-    .model.display_name,
-    .workspace.current_dir,
-    (.context_window.context_window_size // 200000),
-    (
-      (.context_window.current_usage.input_tokens // 0) +
-      (.context_window.current_usage.cache_creation_input_tokens // 0) +
-      (.context_window.current_usage.cache_read_input_tokens // 0)
-    ),
-    (.cost.total_cost_usd // 0)
+  parsed=$(echo "${input}" | awk '
+    { doc = (NR == 1) ? $0 : doc "\n" $0 }
+    END {
+      model_block  = obj_content(doc, "model")
+      model_name   = str_val(model_block, "display_name")
+      if (model_name == "") model_name = "null"
+
+      ws_block    = obj_content(doc, "workspace")
+      current_dir = str_val(ws_block, "current_dir")
+      if (current_dir == "") current_dir = "null"
+
+      cw_block     = obj_content(doc, "context_window")
+      context_size = num_val(cw_block, "context_window_size")
+      if (context_size == "") context_size = "200000"
+
+      cu_block       = obj_content(cw_block, "current_usage")
+      input_tokens   = num_val(cu_block, "input_tokens")                   + 0
+      cache_creation = num_val(cu_block, "cache_creation_input_tokens")    + 0
+      cache_read     = num_val(cu_block, "cache_read_input_tokens")        + 0
+      current_usage  = input_tokens + cache_creation + cache_read
+
+      cost_block = obj_content(doc, "cost")
+      cost_usd   = num_val(cost_block, "total_cost_usd")
+      if (cost_usd == "") cost_usd = "0"
+
+      print model_name
+      print current_dir
+      print context_size
+      print current_usage
+      print cost_usd
+    }
+
+    # Return the fragment starting at { and ending before the matching } for the
+    # given key in s (brace-depth tracked, string-aware so quoted braces are ignored).
+    # Result starts with { but does not include the closing }; callers use str_val/num_val
+    # to extract fields from it. Note: match() itself is not string-aware — false positives
+    # are possible if a string VALUE contains the literal pattern "key":{, but Claude Code
+    # JSON (model names, paths, numbers) will never trigger this in practice.
+    function obj_content(s, key,    pat, pos, depth, result, i, ch, in_str, esc) {
+      pat = "\"" key "\"[[:space:]]*:[[:space:]]*{"
+      if (!match(s, pat)) return ""
+      pos = RSTART + RLENGTH - 1  # index of opening {
+      depth = 0; in_str = 0; esc = 0; result = ""
+      for (i = pos; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (esc)               { esc = 0; result = result ch; continue }
+        if (ch == "\\" && in_str) { esc = 1; result = result ch; continue }
+        if (ch == "\"")        { in_str = !in_str; result = result ch; continue }
+        if (!in_str) {
+          if      (ch == "{") depth++
+          else if (ch == "}") { if (--depth == 0) return result }
+        }
+        result = result ch
+      }
+      return result
+    }
+
+    # Return the string value of key from a JSON object fragment s.
+    function str_val(s, key,    pat, i, ch, val, esc) {
+      pat = "\"" key "\"[[:space:]]*:[[:space:]]*\""
+      if (!match(s, pat)) return ""
+      s = substr(s, RSTART + RLENGTH)
+      val = ""; esc = 0
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (esc) {
+          if      (ch == "\"") val = val "\""
+          else if (ch == "\\") val = val "\\"
+          else if (ch == "n")  val = val "\n"
+          else if (ch == "t")  val = val "\t"
+          else                 val = val ch
+          esc = 0
+        } else if (ch == "\\") {
+          esc = 1
+        } else if (ch == "\"") {
+          return val
+        } else {
+          val = val ch
+        }
+      }
+      return val
+    }
+
+    # Return the numeric value of key from a JSON object fragment s.
+    function num_val(s, key,    pat, rest) {
+      if (s == "") return ""
+      pat = "\"" key "\"[[:space:]]*:[[:space:]]*"
+      if (!match(s, pat)) return ""
+      rest = substr(s, RSTART + RLENGTH)
+      match(rest, /^-?[0-9][0-9.eE+\-]*/)
+      if (RLENGTH <= 0) return ""
+      return substr(rest, RSTART, RLENGTH)
+    }
   ' 2>/dev/null) || {
     echo "Error: Failed to parse JSON input" >&2
     return 1
@@ -617,12 +704,6 @@ main() {
     echo "Error: HOME environment variable not set" >&2
     exit 1
   fi
-
-  # Check dependencies
-  command -v jq >/dev/null 2>&1 || {
-    echo "Error: jq required" >&2
-    exit 1
-  }
 
   # Configuration is now hardcoded via @CONFIG_START block
   # Messages are hardcoded via @MESSAGES_START block

@@ -54,7 +54,7 @@ shellcheck statusline.sh install.sh tests/*.sh  # Uses .shellcheckrc config
 ### Component-Based Flow
 
 ```
-JSON Input → Parse (jq) → Load i18n → Build Components → Assemble → ANSI Output
+JSON Input → Parse (awk) → Load i18n → Build Components → Assemble → ANSI Output
 ```
 
 **Key functional areas in statusline.sh**:
@@ -169,8 +169,8 @@ Each language file (`messages/{lang}.json`) uses a simplified format:
 ```
 
 **How it works**:
-1. Reads JSON messages with `jq`
-2. Uses `jq @sh` for safe shell escaping
+1. Reads JSON messages with `node` (`JSON.parse`)
+2. Applies `@sh`-equivalent shell escaping: wraps each string in single quotes, escaping `'` as `'\''`
 3. Replaces `@CONFIG_START` block with new flags
 4. Replaces `@MESSAGES_START` block with bash arrays
 5. Validates output with `bash -n`
@@ -208,7 +208,7 @@ See `messages/README.md` for complete translation guidelines.
 
 1. Create `messages/de.json` (copy from `messages/en.json`)
 2. Translate all messages in tier arrays
-3. Validate: `jq empty messages/de.json`
+3. Validate: `node -e "JSON.parse(require('fs').readFileSync('messages/de.json','utf8'))" 2>/dev/null && echo ok`
 4. Test patch: `./patch-statusline.sh statusline.sh messages/de.json`
 5. Add "de" to the `available_languages` array in `install.sh` (`prompt_language_selection` function)
 6. Run tests: `./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh`
@@ -278,18 +278,14 @@ Follow Open/Closed Principle - extend without modifying existing code:
 
 ## Parsing JSON Input
 
-Claude Code sends JSON via stdin. Parse once, extract all fields using the `parse_claude_input()` function:
+Claude Code sends JSON via stdin. Parse once, extract all fields using the `parse_claude_input()` function.
 
-```bash
-parsed=$(echo "${input}" | jq -r '
-  .model.display_name,
-  .workspace.current_dir,
-  (.context_window.context_window_size // 200000),
-  (.cost.total_cost_usd // 0)
-')
-```
+The function uses a single `awk` call (no jq dependency) with three helper functions:
+- `obj_content(s, key)` — extracts the `{...}` block for a key (brace-depth tracked, string-aware)
+- `str_val(obj, key)` — extracts a string value from a JSON fragment
+- `num_val(obj, key)` — extracts a numeric value from a JSON fragment
 
-Use jq's `//` operator for null defaults. Single jq call for efficiency.
+Missing keys return `""`, which callers map to sensible defaults (`"null"` for strings, `200000`/`0` for numbers).
 
 ## Git Operations
 
@@ -348,33 +344,38 @@ Two-phase validation with zero-tolerance policy:
 
 ## Dependencies
 
-Required:
+Required (runtime):
 
 - **bash** 3.2+ (macOS default, widely available)
-- **jq** 1.5+ (JSON processor)
+- **awk** (POSIX standard, always present — used for JSON parsing)
 - **git** 2.11+ (for porcelain v2 format)
+
+Required (install/patch-time only):
+
+- **node** (JSON.parse for settings.json and language file operations — always available since Claude Code requires Node.js)
 
 Install:
 
 ```bash
 # macOS
-brew install jq git
+brew install git
 
 # Ubuntu/Debian
-apt-get install jq git
+apt-get install git
 
 # RHEL/CentOS/Fedora
-yum install jq git
+yum install git
 ```
 
 ## Performance Targets
 
 - Total execution: < 95ms (improved from ~100ms)
 - Git operations: < 50ms
-- JSON parsing: < 10ms
+- JSON parsing: < 5ms (awk, ~2-3ms startup vs jq's ~10ms)
 - **i18n overhead: 0ms** (fully static, no runtime loading)
 
 **Performance improvement**:
+- Eliminated jq startup overhead (~10ms → ~3ms) by replacing with awk for the runtime parser
 - Eliminated 3-5ms runtime overhead through static patching
 - Messages hardcoded as bash arrays (direct access)
 - No config file reading or JSON parsing at runtime
@@ -383,7 +384,7 @@ If slow, check:
 
 1. Git repo size (large repos increase operation time)
 2. Number of modified files (affects status parsing)
-3. jq query complexity (keep single parse)
+3. awk program complexity (keep single parse in `parse_claude_input`)
 
 ## Common Patterns
 
@@ -459,12 +460,12 @@ The codebase contains several fallback mechanisms for robustness and compatibili
 Strategy: User explicitly chooses language via patching. No dynamic loading or fallback needed.
 
 ### JSON Parsing (statusline.sh)
-Uses jq's `//` operator for null-safe defaults:
+Uses awk helper functions with explicit defaults when keys are absent or null:
 - `context_window_size`: 200000
 - Token counts: 0
 - Cost: 0
 
-Strategy: Sensible defaults when Claude Code doesn't provide values.
+Strategy: Sensible defaults when Claude Code doesn't provide values. The awk `num_val()` returns `""` for missing/null keys; callers apply defaults inline.
 
 ### Git State Defaults (statusline.sh)
 - `branch`: "(detached HEAD)"

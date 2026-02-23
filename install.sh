@@ -160,7 +160,7 @@ check_dependencies() {
   check_bash_version    || missing+=("bash 3.2+")
   command -v claude >/dev/null 2>&1 || missing+=("claude")
   command -v curl   >/dev/null 2>&1 || missing+=("curl")
-  command -v jq     >/dev/null 2>&1 || missing+=("jq")
+  command -v node   >/dev/null 2>&1 || missing+=("node")
   # shellcheck disable=SC2310
   check_git_version     || missing+=("git 2.11+")
 
@@ -175,7 +175,7 @@ check_dependencies() {
   # shellcheck disable=SC2312
   success "claude $(extract_version claude)"
   # shellcheck disable=SC2312
-  success "jq $(extract_version jq)"
+  success "node $(extract_version node)"
   # shellcheck disable=SC2312
   success "git $(extract_version git)"
   # shellcheck disable=SC2310
@@ -205,7 +205,7 @@ show_install_instructions() {
   case "${platform}" in
     Darwin)
       echo -e "${CYAN}Install on macOS:${NC}"
-      echo "  brew install curl jq git"
+      echo "  brew install curl git node"
       ;;
     Linux)
       # shellcheck disable=SC2310
@@ -215,18 +215,18 @@ show_install_instructions() {
         echo -e "${CYAN}Install on Linux:${NC}"
       fi
       if command -v apt-get >/dev/null 2>&1; then
-        echo "  sudo apt-get update && sudo apt-get install curl jq git"
+        echo "  sudo apt-get update && sudo apt-get install curl git nodejs"
       elif command -v yum >/dev/null 2>&1; then
-        echo "  sudo yum install curl jq git"
+        echo "  sudo yum install curl git nodejs"
       elif command -v dnf >/dev/null 2>&1; then
-        echo "  sudo dnf install curl jq git"
+        echo "  sudo dnf install curl git nodejs"
       else
-        echo "  Use your package manager to install: curl jq git"
+        echo "  Use your package manager to install: curl git node"
       fi
       ;;
     *)
       echo -e "${CYAN}Please install the following dependencies:${NC}"
-      echo "  - curl, jq 1.5+, git 2.11+, bash 3.2+"
+      echo "  - curl, node, git 2.11+, bash 3.2+"
       ;;
   esac
 
@@ -472,7 +472,8 @@ configure_settings() {
     info "Created new settings.json"
   fi
 
-  if ! jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+  if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
+       "${SETTINGS_FILE}" 2>/dev/null; then
     error "Existing settings.json contains invalid JSON"
     echo "  ${ARROW} Please fix ${SETTINGS_FILE} manually" >&2
     return 1
@@ -484,17 +485,24 @@ configure_settings() {
 
   temp_file=$(mktemp) || { error "Cannot create temporary file"; return 1; }
 
-  jq --arg cmd "${SETTINGS_COMMAND}" '.statusLine = {
-    "type": "command",
-    "command": $cmd,
-    "padding": 0
-  }' "${SETTINGS_FILE}" > "${temp_file}" 2>/dev/null || {
+  # Use node to merge statusLine into settings.json, preserving all other keys.
+  # Path and command passed via process.argv to avoid shell injection risks.
+  node - "${SETTINGS_FILE}" "${SETTINGS_COMMAND}" "${temp_file}" 2>/dev/null <<'NODEEOF' || {
+    var fs = require('fs');
+    var src  = process.argv[process.argv.length - 3];
+    var cmd  = process.argv[process.argv.length - 2];
+    var dest = process.argv[process.argv.length - 1];
+    var settings = JSON.parse(fs.readFileSync(src, 'utf8'));
+    settings.statusLine = { type: 'command', command: cmd, padding: 0 };
+    fs.writeFileSync(dest, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+NODEEOF
     error "Failed to update configuration"
     rm -f "${temp_file}"
     return 1
   }
 
-  if ! jq empty "${temp_file}" 2>/dev/null; then
+  if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
+       "${temp_file}" 2>/dev/null; then
     error "Generated invalid JSON"
     rm -f "${temp_file}"
     return 1
