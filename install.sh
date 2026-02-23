@@ -59,11 +59,20 @@ download_with_retry() {
   return 1
 }
 
-cleanup_on_error() {
+cleanup_temp() {
   [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]] && rm -rf "${TEMP_DIR}"
+}
+
+cleanup_on_error() {
+  cleanup_temp
   echo ""
   error "Installation failed. No changes made."
   exit 1
+}
+
+validate_json() {
+  node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
+       "$1" 2>/dev/null
 }
 
 # ============================================================================
@@ -418,10 +427,10 @@ prompt_component_selection() {
     esac
   done
 
-  local result=""
-  [[ "${show_messages}" == "true" ]] && result+="messages "
-  [[ "${show_cost}" == "true" ]]     && result+="cost"
-  echo "${result}" | xargs
+  local -a result=()
+  [[ "${show_messages}" == "true" ]] && result+=("messages")
+  [[ "${show_cost}" == "true" ]]     && result+=("cost")
+  echo "${result[*]}"
 }
 
 # ============================================================================
@@ -472,8 +481,8 @@ configure_settings() {
     info "Created new settings.json"
   fi
 
-  if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
-       "${SETTINGS_FILE}" 2>/dev/null; then
+  # shellcheck disable=SC2310
+  if ! validate_json "${SETTINGS_FILE}"; then
     error "Existing settings.json contains invalid JSON"
     echo "  ${ARROW} Please fix ${SETTINGS_FILE} manually" >&2
     return 1
@@ -501,8 +510,8 @@ NODEEOF
     return 1
   }
 
-  if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
-       "${temp_file}" 2>/dev/null; then
+  # shellcheck disable=SC2310
+  if ! validate_json "${temp_file}"; then
     error "Generated invalid JSON"
     rm -f "${temp_file}"
     return 1
@@ -534,34 +543,29 @@ main() {
   print_header
 
   # Step 1: Check Dependencies
-  current_step=$((current_step + 1))
-  step_with_progress "${current_step}" "${total_steps}" "Checking dependencies..."
+  step_with_progress "$((++current_step))" "${total_steps}" "Checking dependencies..."
   # shellcheck disable=SC2310
   check_dependencies || exit 1
 
   # Step 2: Acquire Files
-  current_step=$((current_step + 1))
-  step_with_progress "${current_step}" "${total_steps}" "Acquiring files..."
+  step_with_progress "$((++current_step))" "${total_steps}" "Acquiring files..."
   # shellcheck disable=SC2310
   acquire_files || cleanup_on_error
 
   # Step 3: Select Preferences
-  current_step=$((current_step + 1))
-  step_with_progress "${current_step}" "${total_steps}" "Configuring preferences..."
+  step_with_progress "$((++current_step))" "${total_steps}" "Configuring preferences..."
   selected_language=$(prompt_language_selection)
   selected_components=$(prompt_component_selection)
   success "Language: ${selected_language}, Components: ${selected_components:-none}"
 
   # Step 4: Apply Patches
-  current_step=$((current_step + 1))
-  step_with_progress "${current_step}" "${total_steps}" "Applying patches..."
+  step_with_progress "$((++current_step))" "${total_steps}" "Applying patches..."
   # shellcheck disable=SC2310
   apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}" || cleanup_on_error
   success "Patched successfully"
 
   # Step 5: Install & Configure
-  current_step=$((current_step + 1))
-  step_with_progress "${current_step}" "${total_steps}" "Installing to ~/.claude..."
+  step_with_progress "$((++current_step))" "${total_steps}" "Installing to ~/.claude..."
   # shellcheck disable=SC2310
   install_statusline "${WORKING_DIR}/statusline.sh" || cleanup_on_error
   success "Installed to ${TARGET_FILE}"
@@ -579,11 +583,11 @@ main() {
     echo '     }'
     echo '   }'
     echo ""
-    [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]] && rm -rf "${TEMP_DIR}"
+    cleanup_temp
     exit "${EXIT_PARTIAL_FAILURE}"
   fi
 
-  [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]] && rm -rf "${TEMP_DIR}"
+  cleanup_temp
 
   print_footer "${INSTALL_MODE}" "${selected_language}"
   exit 0

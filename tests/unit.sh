@@ -264,7 +264,7 @@ bar_50=$(build_progress_bar 50)
 bar_stripped=$(echo -e "${bar_50}" | sed 's/\x1b\[[0-9;]*m//g')
 
 # Count UTF-8 characters (should be BAR_WIDTH total)
-char_count=$(echo -n "${bar_stripped}" | wc -m)
+char_count=$(( $(echo -n "${bar_stripped}" | wc -m) ))
 # shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
 test "progress bar character count (50%)" "${BAR_WIDTH}" "${char_count}"
 
@@ -297,13 +297,13 @@ fi
 # Test edge cases
 bar_0=$(build_progress_bar 0)
 bar_0_stripped=$(echo -e "${bar_0}" | sed 's/\x1b\[[0-9;]*m//g')
-empty_0_count=$(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l)
+empty_0_count=$(( $(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l) ))
 # shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
 test "0% progress bar (all empty)" "${BAR_WIDTH}" "${empty_0_count}"
 
 bar_100=$(build_progress_bar 100)
 bar_100_stripped=$(echo -e "${bar_100}" | sed 's/\x1b\[[0-9;]*m//g')
-filled_100_count=$(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l)
+filled_100_count=$(( $(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l) ))
 # shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
 test "100% progress bar (all filled)" "${BAR_WIDTH}" "${filled_100_count}"
 
