@@ -85,26 +85,16 @@ Messages should follow a thematic escalation:
    jq empty messages/de.json
    ```
 
-4. **Test patching**:
+4. **Test with installer**:
    ```bash
-   ./patch-statusline.sh statusline.sh messages/de.json
+   ./install.sh
    ```
 
-5. **Update installers** (optional, if using install.sh):
+5. **Update installer**:
 
    **install.sh** (around line 480):
    ```bash
    local available_languages=("en" "pt" "es" "de")
-   ```
-
-   **install.ps1** (around line 308):
-   ```powershell
-   $languages = @(
-       @{ Code = "en"; Name = "English" },
-       @{ Code = "pt"; Name = "Português" },
-       @{ Code = "es"; Name = "Español" },
-       @{ Code = "de"; Name = "Deutsch" }
-   )
    ```
 
 6. **Run tests**:
@@ -121,15 +111,8 @@ Messages should follow a thematic escalation:
 # Validate JSON syntax
 jq empty messages/your-lang.json
 
-# Patch statusline with your language
-cp statusline.sh statusline-test.sh
-./patch-statusline.sh statusline-test.sh messages/your-lang.json
-
-# Test with sample input
-echo '{"model":{"display_name":"Test"},"workspace":{"current_dir":"/tmp"},"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":5000}},"cost":{"total_cost_usd":0}}' | ./statusline-test.sh
-
-# Cleanup
-rm statusline-test.sh
+# Install and test with your language
+./install.sh
 ```
 
 ## Cultural Adaptation Examples
@@ -142,26 +125,6 @@ rm statusline-test.sh
 ### Spanish
 - "hold my drink" → "sostén mi bebida" (direct translation)
 - "yolo mode activated" → "modo yolo activado" (YOLO is universal)
-
-## How Patching Works
-
-The `patch-statusline.sh` script:
-1. Reads your JSON language file
-2. Converts JSON arrays to bash arrays using `jq @sh` (proper escaping)
-3. Replaces the `@MESSAGES_START` / `@MESSAGES_END` block in statusline.sh
-4. Creates a fully static script with your language hardcoded
-
-Example transformation:
-```json
-{
-  "very_low": ["just getting started", "barely touched it"]
-}
-```
-
-Becomes:
-```bash
-readonly CONTEXT_MSG_VERY_LOW=('just getting started' 'barely touched it')
-```
 
 ## Language Codes
 

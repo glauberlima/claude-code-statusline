@@ -31,8 +31,6 @@ Install with one command. Works immediately. Configure when you need it.
 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
 ```
 
-**Requirements**: bash, jq, git (the installer checks and shows install commands if needed)
-
 ## Features
 
 - 📁 **Directory name**
@@ -46,70 +44,13 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 ## ⚙️ Configuration
 
-### Installation Flow
-
-```mermaid
-flowchart TD
-    A([▶ Start]) --> B["① Check Dependencies\nbash, curl, claude, node, git"]
-    B --> C{"Local files\npresent?"}
-    C -- Yes --> D["② Use local files\n(validate in place)"]
-    C -- No --> E["② Download from GitHub\n(to temp directory)"]
-    D --> F["③ Select Features"]
-    E --> F
-    F --> G{"Messages\nenabled?"}
-    G -- Yes --> H["Select Language\n🇺🇸 EN | 🇧🇷 PT | 🇪🇸 ES"]
-    G -- No --> I["④ Apply Patches\npatch-statusline.sh --flags"]
-    H --> I
-    I --> J["⑤ Install & Configure\ncopy → ~/.claude/statusline.sh\nupdate settings.json"]
-    J --> K([✓ Done])
-
-    style A fill:#2d8659,color:#fff
-    style K fill:#2d8659,color:#fff
-    style G fill:#d4a017,color:#000
-    style C fill:#d4a017,color:#000
-```
-
-### Change Language or Toggle Components
-
-**Option 1: Use the installer** (recommended for initial setup):
+Re-run the installer to change language or toggle features:
 
 ```bash
 ./install.sh
 ```
-
-The installer lets you:
-- Select language (🇺🇸 English | 🇧🇷 Português | 🇪🇸 Español)
-- Enable/disable context messages
-- Enable/disable cost display
-
-**Option 2: Use the patch script** (for manual customization):
-
-```bash
-# Patch to Portuguese with all features
-./patch-statusline.sh ~/.claude/statusline.sh messages/pt.json
-
-# Disable messages
-./patch-statusline.sh ~/.claude/statusline.sh --no-messages
-
-# Spanish with cost tracking only
-./patch-statusline.sh ~/.claude/statusline.sh messages/es.json --no-messages
-```
-
-The patch script creates a fully optimized, static version with zero runtime overhead. To change settings, re-run the patch.
-
-### Add a Language
-
-See [messages/README.md](messages/README.md) for translation guidelines.
 
 ## 🛠️ Development
-
-### From Source
-
-```bash
-git clone https://github.com/glauberlima/claude-code-statusline.git
-cd claude-code-statusline
-./install.sh
-```
 
 ### Testing
 
