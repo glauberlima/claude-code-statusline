@@ -76,6 +76,7 @@ print_header() {
 print_footer() {
   local mode="$1"
   local language="${2:-en}"
+  local components="${3:-messages cost}"
 
   echo ""
   echo "╔══════════════════════════════════════════════════╗"
@@ -84,7 +85,9 @@ print_footer() {
   echo ""
   echo "Installed: ${TARGET_FILE}"
   echo "Mode: ${mode}"
-  echo "Language: ${language}"
+  if [[ "${components}" == *"messages"* ]]; then
+    echo "Language: ${language}"
+  fi
   echo ""
   echo -e "${CYAN}Next step:${NC} Restart Claude Code to see your new statusline"
   echo ""
@@ -398,31 +401,24 @@ prompt_component_selection() {
   fi
 
   echo "" >&2
-  echo -e "${CYAN}Select components to display:${NC}" >&2
-  echo -e "${MUTED}(Enter numbers to toggle, empty = show all)${NC}" >&2
+  echo -e "${CYAN}Select features:${NC}" >&2
   echo "" >&2
-  echo "  1) [X] Context messages (funny messages)" >&2
-  echo "  2) [X] Cost display (💰)" >&2
+  echo "  1) All features (messages + cost)" >&2
+  echo "  2) Messages only" >&2
+  echo "  3) Cost only" >&2
+  echo "  4) Minimal (no messages, no cost)" >&2
   echo "" >&2
-  printf "Toggle (default: show all): " >&2
-  read -r input < /dev/tty || input=""
-  [[ -z "${input}" ]] && echo "messages cost" && return
+  printf "Enter selection [1]: " >&2
+  read -r selection < /dev/tty || selection=""
+  selection="${selection:-1}"
 
-  local show_messages=true
-  local show_cost=true
-
-  for num in ${input}; do
-    case "${num}" in
-      1) show_messages=$([[ "${show_messages}" == "true" ]] && echo "false" || echo "true") ;;
-      2) show_cost=$([[ "${show_cost}" == "true" ]] && echo "false" || echo "true") ;;
-      *) ;;
-    esac
-  done
-
-  local -a result=()
-  [[ "${show_messages}" == "true" ]] && result+=("messages")
-  [[ "${show_cost}" == "true" ]]     && result+=("cost")
-  echo "${result[*]}"
+  case "${selection}" in
+    1) echo "messages cost" ;;
+    2) echo "messages" ;;
+    3) echo "cost" ;;
+    4) echo "" ;;
+    *) echo "messages cost" ;;
+  esac
 }
 
 # ============================================================================
@@ -546,8 +542,12 @@ main() {
 
   # Step 3: Select Preferences
   step_with_progress "$((++current_step))" "${total_steps}" "Configuring preferences..."
-  selected_language=$(prompt_language_selection)
   selected_components=$(prompt_component_selection)
+
+  # Only ask language if messages are enabled (language only affects context messages)
+  if [[ "${selected_components}" == *"messages"* ]]; then
+    selected_language=$(prompt_language_selection)
+  fi
   success "Language: ${selected_language}, Components: ${selected_components:-none}"
 
   # Step 4: Apply Patches
@@ -581,7 +581,7 @@ main() {
 
   cleanup_temp
 
-  print_footer "${INSTALL_MODE}" "${selected_language}"
+  print_footer "${INSTALL_MODE}" "${selected_language}" "${selected_components}"
   exit 0
 }
 
