@@ -46,6 +46,29 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 ## ⚙️ Configuration
 
+### Installation Flow
+
+```mermaid
+flowchart TD
+    A([▶ Start]) --> B["① Check Dependencies\nbash, curl, claude, node, git"]
+    B --> C{"Local files\npresent?"}
+    C -- Yes --> D["② Use local files\n(validate in place)"]
+    C -- No --> E["② Download from GitHub\n(to temp directory)"]
+    D --> F["③ Select Features"]
+    E --> F
+    F --> G{"Messages\nenabled?"}
+    G -- Yes --> H["Select Language\n🇺🇸 EN | 🇧🇷 PT | 🇪🇸 ES"]
+    G -- No --> I["④ Apply Patches\npatch-statusline.sh --flags"]
+    H --> I
+    I --> J["⑤ Install & Configure\ncopy → ~/.claude/statusline.sh\nupdate settings.json"]
+    J --> K([✓ Done])
+
+    style A fill:#2d8659,color:#fff
+    style K fill:#2d8659,color:#fff
+    style G fill:#d4a017,color:#000
+    style C fill:#d4a017,color:#000
+```
+
 ### Change Language or Toggle Components
 
 **Option 1: Use the installer** (recommended for initial setup):
