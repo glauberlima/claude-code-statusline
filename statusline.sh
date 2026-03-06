@@ -60,16 +60,7 @@ readonly CONTEXT_MSG_CRITICAL=('living dangerously' 'pushing the limits' 'housto
 
 # String utilities
 get_dirname() { local p="${1//\\//}"; echo "${p##*/}"; }
-sep() { echo -n " ${SEPARATOR} "; }
-
-# Conditional append helper (DRY pattern)
-append_if() {
-  local value="$1"
-  local text="$2"
-  if [[ "${value}" != "0" ]] 2>/dev/null && [[ -n "${value}" ]] && [[ "${value}" != "${NULL_VALUE}" ]]; then
-    echo -n " ${text}"
-  fi
-}
+readonly SEP=" ${SEPARATOR} "
 
 # Validate directory path for security
 # Rejects path traversal (..), tilde expansion (~), and shell metacharacters
@@ -130,30 +121,10 @@ format_number() {
 # Returns a random ANSI color code for context messages
 # Uses modulo to select from predefined color pool (5 colors)
 # Returns: ANSI color escape sequence
-# Bash 3.2 compatible: uses pipe-delimited string instead of arrays
 get_random_message_color() {
-  local colors="${GREEN}|${CYAN}|${BLUE}|${MAGENTA}|${ORANGE}"
-  local colors_count=5
-
-  # Better distribution than simple modulo (reduces bias)
-  local index=$(( (RANDOM * colors_count) / 32768 ))
-
-  # Extract color using parameter expansion (Bash 3.2 compatible)
-  local i=0
-  local saved_ifs="${IFS}"
-  IFS='|'
-  for color in ${colors}; do
-    if [[ ${i} -eq ${index} ]]; then
-      IFS="${saved_ifs}"
-      echo "${color}"
-      return 0
-    fi
-    ((i++))
-  done
-  IFS="${saved_ifs}"
-
-  # Fallback (should never reach)
-  echo "${CYAN}"
+  local colors=("${GREEN}" "${CYAN}" "${BLUE}" "${MAGENTA}" "${ORANGE}")
+  local index=$(( (RANDOM * ${#colors[@]}) / 32768 ))
+  echo "${colors[${index}]}"
 }
 
 # ============================================================
@@ -289,6 +260,7 @@ parse_claude_input() {
 
 build_progress_bar() {
   local percent="$1"
+  local tier="${2:-}"
 
   # Clamp percent to 0-100 range (prevent negative/overflow)
   if [[ ${percent} -lt 0 ]]; then
@@ -301,8 +273,8 @@ build_progress_bar() {
   local empty=$((BAR_WIDTH - filled))
 
   # Determine bar color based on tier
-  local tier bar_color
-  tier=$(get_context_tier "${percent}")
+  local bar_color
+  [[ -z "${tier}" ]] && tier=$(get_context_tier "${percent}")
 
   case "${tier}" in
     0) bar_color="${GREEN}" ;;    # Very low
@@ -331,10 +303,10 @@ build_progress_bar() {
 # Bash 3.2 compatible: uses bash arrays
 get_context_message() {
   local percent="$1"
+  local tier="${2:-}"
 
   # Determine tier and select message array
-  local tier
-  tier=$(get_context_tier "${percent}")
+  [[ -z "${tier}" ]] && tier=$(get_context_tier "${percent}")
 
   # Select array based on tier
   local messages_array
@@ -415,17 +387,14 @@ get_git_info() {
 
   # Validate and set git directory option
   if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]]; then
-    # Invoke validation separately to avoid masking return value
-    local validation_result=0
+    local valid=0
     validate_directory "${current_dir}"
-    validation_result=$?
-    if [[ "${validation_result}" -eq 0 ]]; then
-      git_opts=(-C "${current_dir}")
-    else
-      # Invalid directory path - treat as not a repo
+    valid=$?
+    if [[ "${valid}" -ne 0 ]]; then
       echo "${STATE_NOT_REPO}"
       return 0
     fi
+    git_opts=(-C "${current_dir}")
   fi
 
   # Check if git repo
@@ -467,80 +436,15 @@ format_ahead_behind() {
   [[ -n "${output}" ]] && echo "${GRAY}|${NC}${output}"
 }
 
-format_git_not_repo() {
-  echo " ${ORANGE}(not a git repository)${NC}"
-}
-
-format_git_clean() {
+format_git_branch() {
   local branch="$1" ahead="$2" behind="$3"
 
-  # Simple format: branch + ahead/behind (no parentheses)
   local output="${MAGENTA}${branch}${NC}"
   local ahead_behind
   ahead_behind=$(format_ahead_behind "${ahead}" "${behind}")
   [[ -n "${ahead_behind}" ]] && output+="${ahead_behind}"
 
-  echo " ${output}"
-}
-
-format_git_dirty() {
-  local branch="$1" files="$2" ahead="$3" behind="$4"
-
-  # Simple branch + ahead/behind (no file count, no line changes)
-  local output="${MAGENTA}${branch}${NC}"
-  local ahead_behind
-  ahead_behind=$(format_ahead_behind "${ahead}" "${behind}")
-  [[ -n "${ahead_behind}" ]] && output+="${ahead_behind}"
-
-  # Return git info and file count separately: "git_output|file_count"
-  echo " ${output}|${files}"
-}
-
-format_git_info() {
-  local git_data="$1"
-
-  # Parse state with IFS protection
-  local state saved_ifs
-  saved_ifs="${IFS}"
-  IFS='|' read -r state _ << EOF
-${git_data}
-EOF
-  IFS="${saved_ifs}"
-
-  case "${state}" in
-    "${STATE_NOT_REPO}")
-      # Returns "git_output|file_count" (empty file count)
-      local not_repo_msg
-      not_repo_msg=$(format_git_not_repo)
-      echo "${not_repo_msg}|"
-      ;;
-    "${STATE_CLEAN}")
-      local branch ahead behind
-      saved_ifs="${IFS}"
-      IFS='|' read -r _ branch ahead behind << EOF
-${git_data}
-EOF
-      IFS="${saved_ifs}"
-      # Returns "git_output|file_count" (empty file count for clean)
-      local clean_msg
-      clean_msg=$(format_git_clean "${branch}" "${ahead}" "${behind}")
-      echo "${clean_msg}|"
-      ;;
-    "${STATE_DIRTY}")
-      local branch files ahead behind
-      saved_ifs="${IFS}"
-      IFS='|' read -r _ branch files ahead behind << EOF
-${git_data}
-EOF
-      IFS="${saved_ifs}"
-      # Already returns "git_output|file_count"
-      format_git_dirty "${branch}" "${files}" "${ahead}" "${behind}"
-      ;;
-    *)
-      # Unknown state - show error
-      echo " ${ORANGE}(unknown git state)${NC}|"
-      ;;
-  esac
+  echo "${output}"
 }
 
 # ============================================================
@@ -570,9 +474,13 @@ build_context_component() {
     fi
   fi
 
+  # Compute tier once, pass to both progress bar and message
+  local tier
+  tier=$(get_context_tier "${context_percent}")
+
   # Get colored progress bar
   local bar
-  bar=$(build_progress_bar "${context_percent}")
+  bar=$(build_progress_bar "${context_percent}" "${tier}")
 
   # Format usage numbers (e.g., "54K/200K")
   local usage_formatted
@@ -584,7 +492,7 @@ build_context_component() {
   local message_part=""
   if [[ "${SHOW_MESSAGES}" == "true" ]]; then
     local message
-    message=$(get_context_message "${context_percent}")
+    message=$(get_context_message "${context_percent}" "${tier}")
 
     local msg_color
     msg_color=$(get_random_message_color)
@@ -615,27 +523,31 @@ build_git_component() {
 
   git_data=$(get_git_info "${current_dir}")
 
-  # format_git_info returns "git_output|file_count" format
-  local formatted git_line file_line saved_ifs
-  formatted=$(format_git_info "${git_data}")
+  # Parse git_data once: "state|branch|files|ahead|behind"
+  local state branch files ahead behind saved_ifs
   saved_ifs="${IFS}"
-  IFS='|' read -r git_line file_line <<< "${formatted}"
+  IFS='|' read -r state branch files ahead behind <<< "${git_data}"
   IFS="${saved_ifs}"
 
-  # Extract state to determine emoji placement
-  local state
-  saved_ifs="${IFS}"
-  IFS='|' read -r state _ << EOF
-${git_data}
-EOF
-  IFS="${saved_ifs}"
-
-  # Return git info and file count separately: "git_display|file_count"
-  if [[ "${state}" = "${STATE_NOT_REPO}" ]]; then
-    echo "${git_line#* }|"
-  else
-    echo "${GIT_ICON} ${git_line#* }|${file_line}"
-  fi
+  # Return "git_display|file_count"
+  case "${state}" in
+    "${STATE_NOT_REPO}")
+      echo "${ORANGE}(not a git repository)${NC}|"
+      ;;
+    "${STATE_CLEAN}")
+      local branch_fmt
+      branch_fmt=$(format_git_branch "${branch}" "${ahead}" "${behind}")
+      echo "${GIT_ICON} ${branch_fmt}|"
+      ;;
+    "${STATE_DIRTY}")
+      local branch_fmt
+      branch_fmt=$(format_git_branch "${branch}" "${ahead}" "${behind}")
+      echo "${GIT_ICON} ${branch_fmt}|${files}"
+      ;;
+    *)
+      echo "${ORANGE}(unknown git state)${NC}|"
+      ;;
+  esac
 }
 
 build_files_component() {
@@ -676,20 +588,19 @@ assemble_statusline() {
   local cost_part="$6"
 
   # Build output with separators
-  local output separator
-  separator=$(sep)
+  local output
 
   # New order: dir | git | files | model | context | cost
-  output="${dir_part}${separator}${git_part}"
+  output="${dir_part}${SEP}${git_part}"
 
   # Add optional components
-  [[ -n "${files_part}" ]] && output+="${separator}${files_part}"
+  [[ -n "${files_part}" ]] && output+="${SEP}${files_part}"
 
   # Add model and context
-  output+="${separator}${model_part}${separator}${context_part}"
+  output+="${SEP}${model_part}${SEP}${context_part}"
 
   # Add cost if present
-  [[ -n "${cost_part}" ]] && output+="${separator}${cost_part}"
+  [[ -n "${cost_part}" ]] && output+="${SEP}${cost_part}"
 
   echo -e "${output}"
 }
@@ -739,11 +650,11 @@ main() {
     exit 1
   fi
 
-  # Validate field count (expected: 5 lines)
-  local line_count
-  line_count=$(echo "${parsed}" | wc -l)
-  if [[ ${line_count} -ne 5 ]]; then
-    echo "Error: Expected 5 fields from JSON, got ${line_count}" >&2
+  # Validate field count (expected: 5 lines) - bash-native, no subshell
+  local lines
+  IFS=$'\n' read -r -d '' -a lines <<< "${parsed}" || true
+  if [[ ${#lines[@]} -ne 5 ]]; then
+    echo "Error: Expected 5 fields from JSON, got ${#lines[@]}" >&2
     exit 1
   fi
 
