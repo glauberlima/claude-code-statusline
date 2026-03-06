@@ -116,12 +116,18 @@ muted()   { echo -e "${MUTED}$1${NC}"; }
 # ============================================================================
 
 check_bash_version() {
-  if [[ "${BASH_VERSINFO[0]}" -lt 3 ]] || \
-     [[ "${BASH_VERSINFO[0]}" -eq 3 && "${BASH_VERSINFO[1]}" -lt 2 ]]; then
+  # shellcheck disable=SC2310
+  compare_versions 3 2 "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}" || {
     echo "Error: bash 3.2+ required (found ${BASH_VERSION})"
     return 1
-  fi
-  return 0
+  }
+}
+
+compare_versions() {
+  local req_major="$1" req_minor="$2" act_major="$3" act_minor="$4"
+  [[ "${act_major}" -gt "${req_major}" ]] && return 0
+  [[ "${act_major}" -eq "${req_major}" && "${act_minor}" -ge "${req_minor}" ]] && return 0
+  return 1
 }
 
 generate_timestamp() {
@@ -136,9 +142,7 @@ extract_version() {
 check_git_version() {
   local git_version_str major minor
 
-  if ! command -v git >/dev/null 2>&1; then
-    return 1
-  fi
+  command -v git >/dev/null 2>&1 || return 1
 
   git_version_str=$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1)
   [[ -z "${git_version_str}" ]] && return 1
@@ -146,10 +150,8 @@ check_git_version() {
   major=$(echo "${git_version_str}" | cut -d. -f1)
   minor=$(echo "${git_version_str}" | cut -d. -f2)
 
-  if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 11 ]]; then
-    return 1
-  fi
-  return 0
+  # shellcheck disable=SC2310
+  compare_versions 2 11 "${major}" "${minor}"
 }
 
 check_dependencies() {
@@ -178,8 +180,6 @@ check_dependencies() {
   success "git ${v_git}"
   # shellcheck disable=SC2310
   is_wsl && muted "  Detected: WSL environment"
-
-  return 0
 }
 
 show_install_instructions() {
@@ -255,7 +255,6 @@ download_file() {
     error "Downloaded file is empty"
     return 1
   fi
-  return 0
 }
 
 validate_file() {
@@ -278,7 +277,6 @@ validate_file() {
     error "File does not appear to be statusline.sh"
     return 1
   fi
-  return 0
 }
 
 # ============================================================================
@@ -335,7 +333,6 @@ acquire_files() {
     validate_file "${WORKING_DIR}/statusline.sh" || return 1
     success "Files downloaded and validated"
   fi
-  return 0
 }
 
 # ============================================================================
@@ -362,68 +359,64 @@ apply_patches() {
     error "Patching failed"
     return 1
   }
-  return 0
 }
 
 # ============================================================================
 # Preference Functions
 # ============================================================================
 
-prompt_language_selection() {
-  local available_languages=("en" "pt" "es")
-  local lang_names=("English" "Português" "Español")
+prompt_menu() {
+  local title="$1"
+  local default_key="$2"
+  shift 2
+  local items=("$@")
 
   # shellcheck disable=SC2310
   if is_piped; then
-    echo "en"
+    echo "${default_key}"
     return
   fi
 
   echo "" >&2
-  echo -e "${CYAN}Select statusline language:${NC}" >&2
+  echo -e "${CYAN}${title}${NC}" >&2
   echo "" >&2
-  for i in "${!available_languages[@]}"; do
-    echo "  $((i + 1))) ${lang_names[i]} (${available_languages[i]})" >&2
+
+  local i=0
+  for item in "${items[@]}"; do
+    local label
+    label="${item#*:}"
+    echo "  $((i + 1))) ${label}" >&2
+    i=$((i + 1))
   done
+
   echo "" >&2
   printf "Enter selection [1]: " >&2
   read -r selection < /dev/tty || selection=""
   selection="${selection:-1}"
 
   local selected_index=$((selection - 1))
-  if [[ "${selected_index}" -ge 0 ]] && [[ "${selected_index}" -lt "${#available_languages[@]}" ]]; then
-    echo "${available_languages[${selected_index}]}"
+  if [[ "${selected_index}" -ge 0 ]] && [[ "${selected_index}" -lt "${#items[@]}" ]]; then
+    local selected_item
+    selected_item="${items[${selected_index}]}"
+    echo "${selected_item%%:*}"
   else
-    echo "en"
+    echo "${default_key}"
   fi
 }
 
+prompt_language_selection() {
+  prompt_menu "Select statusline language:" "en" \
+    "en:English (en)" \
+    "pt:Português (pt)" \
+    "es:Español (es)"
+}
+
 prompt_component_selection() {
-  # shellcheck disable=SC2310
-  if is_piped; then
-    echo "messages cost"
-    return
-  fi
-
-  echo "" >&2
-  echo -e "${CYAN}Select features:${NC}" >&2
-  echo "" >&2
-  echo "  1) All features (messages + cost)" >&2
-  echo "  2) Messages only" >&2
-  echo "  3) Cost only" >&2
-  echo "  4) Minimal (no messages, no cost)" >&2
-  echo "" >&2
-  printf "Enter selection [1]: " >&2
-  read -r selection < /dev/tty || selection=""
-  selection="${selection:-1}"
-
-  case "${selection}" in
-    1) echo "messages cost" ;;
-    2) echo "messages" ;;
-    3) echo "cost" ;;
-    4) echo "" ;;
-    *) echo "messages cost" ;;
-  esac
+  prompt_menu "Select features:" "messages cost" \
+    "messages cost:All features (messages + cost)" \
+    "messages:Messages only" \
+    "cost:Cost only" \
+    ":Minimal (no messages, no cost)"
 }
 
 # ============================================================================
@@ -460,7 +453,6 @@ install_statusline() {
     [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
     return 1
   }
-  return 0
 }
 
 configure_settings() {
@@ -511,7 +503,6 @@ NODEEOF
   }
 
   success "Configured ~/.claude/settings.json"
-  return 0
 }
 
 # ============================================================================
