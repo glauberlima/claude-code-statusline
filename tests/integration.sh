@@ -160,25 +160,26 @@ main() {
   echo ""
   echo -e "${YELLOW}=== Security Tests ===${NC}"
 
-  # Test 9: Directory traversal attack
-  run_test "Security: Directory traversal (../../../../etc)" '{
+  # Helper: test path-based security with given current_dir
+  run_path_security_test() {
+    local test_name="$1"
+    local current_dir="$2"
+    local json
+    json='{
     "model": {"display_name": "Test"},
-    "workspace": {"current_dir": "../../../../etc"},
+    "workspace": {"current_dir": "'"${current_dir}"'"},
     "context_window": {
       "context_window_size": 200000,
       "current_usage": {"input_tokens": 1000}
     }
   }'
+    run_test "Security: ${test_name}" "${json}"
+  }
 
-  # Test 10: Absolute path attack
-  run_test "Security: Absolute path (/tmp/malicious)" '{
-    "model": {"display_name": "Test"},
-    "workspace": {"current_dir": "/tmp/malicious"},
-    "context_window": {
-      "context_window_size": 200000,
-      "current_usage": {"input_tokens": 1000}
-    }
-  }'
+  # Test 9-10, 12: Path-based security tests
+  run_path_security_test "Directory traversal (../../../../etc)" "../../../../etc"
+  run_path_security_test "Absolute path (/tmp/malicious)" "/tmp/malicious"
+  run_path_security_test "Tilde path (~/.ssh)" "~/.ssh"
 
   # Test 11: Format string injection in cost
   run_test "Security: Format string injection (%x %x %x)" '{
@@ -189,16 +190,6 @@ main() {
       "current_usage": {"input_tokens": 1000}
     },
     "cost": {"total_cost_usd": "%x %x %x"}
-  }'
-
-  # Test 12: Tilde path expansion
-  run_test "Security: Tilde path (~/.ssh)" '{
-    "model": {"display_name": "Test"},
-    "workspace": {"current_dir": "~/.ssh"},
-    "context_window": {
-      "context_window_size": 200000,
-      "current_usage": {"input_tokens": 1000}
-    }
   }'
 
   # Test 13: Invalid cost values

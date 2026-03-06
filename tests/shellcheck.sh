@@ -26,32 +26,35 @@ FILES=(
   "${SCRIPT_DIR}/tests/shellcheck.sh"
 )
 
+# Helper: run a check on all files, track failures
+run_check() {
+  local label="$1"
+  shift  # Remove label, remaining args are the command
+  local cmd=("$@")
+
+  for file in "${FILES[@]}"; do
+    filename=$(basename "${file}")
+    if "${cmd[@]}" "${file}" 2>/dev/null; then
+      echo -e "${GREEN}✓${NC} ${filename}"
+    else
+      echo -e "${RED}✗${NC} ${filename} (${label} failed)"
+      if [[ "${cmd[0]}" == "bash" ]]; then
+        "${cmd[@]}" "${file}"  # Show error without suppression for bash
+      fi
+      FAILED=1
+    fi
+  done
+}
+
 # Step 1: Bash syntax validation (bash -n)
 echo "Step 1: Bash Syntax Validation (bash -n)"
 echo "----------------------------------------"
-for file in "${FILES[@]}"; do
-  filename=$(basename "${file}")
-  if bash -n "${file}" 2>/dev/null; then
-    echo -e "${GREEN}✓${NC} ${filename}"
-  else
-    echo -e "${RED}✗${NC} ${filename} (syntax error)"
-    bash -n "${file}"  # Show error without suppression
-    FAILED=1
-  fi
-done
+run_check "syntax error" bash -n
 
 echo ""
 echo "Step 2: Shellcheck Static Analysis"
 echo "----------------------------------------"
-for file in "${FILES[@]}"; do
-  filename=$(basename "${file}")
-  if shellcheck "${file}"; then
-    echo -e "${GREEN}✓${NC} ${filename}"
-  else
-    echo -e "${RED}✗${NC} ${filename}"
-    FAILED=1
-  fi
-done
+run_check "shellcheck" shellcheck
 
 echo ""
 echo "========================================"

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
+# Marker constants
+readonly CONFIG_START_MARKER='@CONFIG_START'
+readonly CONFIG_END_MARKER='@CONFIG_END'
+readonly MSG_START_MARKER='@MESSAGES_START'
+readonly MSG_END_MARKER='@MESSAGES_END'
+
 # ============================================================
 # patch-statusline.sh - Static Message Patching Tool
 # ============================================================
@@ -58,7 +64,7 @@ replace_config_block() {
   local content
   content="readonly SHOW_MESSAGES=${show_messages}
 readonly SHOW_COST=${show_cost}"
-  _replace_marker_block "${file}" '@CONFIG_START' '@CONFIG_END' "${content}"
+  _replace_marker_block "${file}" "${CONFIG_START_MARKER}" "${CONFIG_END_MARKER}" "${content}"
 }
 
 # Replace @MESSAGES_START to @MESSAGES_END block
@@ -97,7 +103,7 @@ readonly CONTEXT_MSG_MEDIUM=(${medium})
 readonly CONTEXT_MSG_HIGH=(${high})
 readonly CONTEXT_MSG_CRITICAL=(${critical})"
 
-  _replace_marker_block "${file}" '@MESSAGES_START' '@MESSAGES_END' "${content}"
+  _replace_marker_block "${file}" "${MSG_START_MARKER}" "${MSG_END_MARKER}" "${content}"
 }
 
 # ============================================================
@@ -162,12 +168,12 @@ main() {
   }
 
   # Validate markers exist
-  if ! grep -q '@CONFIG_START' "${statusline_file}"; then
-    echo "Error: @CONFIG_START marker not found in ${statusline_file}" >&2
+  if ! grep -q "${CONFIG_START_MARKER}" "${statusline_file}"; then
+    echo "Error: ${CONFIG_START_MARKER} marker not found in ${statusline_file}" >&2
     exit 1
   fi
-  if ! grep -q '@MESSAGES_START' "${statusline_file}"; then
-    echo "Error: @MESSAGES_START marker not found in ${statusline_file}" >&2
+  if ! grep -q "${MSG_START_MARKER}" "${statusline_file}"; then
+    echo "Error: ${MSG_START_MARKER} marker not found in ${statusline_file}" >&2
     exit 1
   fi
 
@@ -180,13 +186,6 @@ main() {
 
   # 2. Replace MESSAGES block (if language JSON provided)
   if [[ -n "${language_json}" ]]; then
-    # Validate JSON syntax
-    if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
-         "${language_json}" 2>/dev/null; then
-      echo "Error: Invalid JSON in ${language_json}" >&2
-      exit 1
-    fi
-
     replace_messages_block "${statusline_file}" "${language_json}"
     echo "  ✓ Updated messages from ${language_json}"
   else
