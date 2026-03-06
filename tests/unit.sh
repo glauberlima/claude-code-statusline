@@ -87,34 +87,18 @@ done
 
 # Test tier boundaries
 echo ""
-echo "Testing message tier boundaries..."
-# Test tier boundaries by verifying get_context_tier() returns correct tier
-tier_19=$(get_context_tier 19)
-test "tier boundary 19% (tier 0)" "0" "${tier_19}"
-
-tier_20=$(get_context_tier 20)
-test "tier boundary 20% (tier 0)" "0" "${tier_20}"
-
-tier_21=$(get_context_tier 21)
-test "tier boundary 21% (tier 1)" "1" "${tier_21}"
-
-tier_40=$(get_context_tier 40)
-test "tier boundary 40% (tier 1)" "1" "${tier_40}"
-
-tier_41=$(get_context_tier 41)
-test "tier boundary 41% (tier 2)" "2" "${tier_41}"
-
-tier_60=$(get_context_tier 60)
-test "tier boundary 60% (tier 2)" "2" "${tier_60}"
-
-tier_61=$(get_context_tier 61)
-test "tier boundary 61% (tier 3)" "3" "${tier_61}"
-
-tier_80=$(get_context_tier 80)
-test "tier boundary 80% (tier 3)" "3" "${tier_80}"
-
-tier_81=$(get_context_tier 81)
-test "tier boundary 81% (tier 4)" "4" "${tier_81}"
+echo "Testing message tier boundaries and context tier..."
+# Data-driven tier boundary tests covering all critical values
+declare -a tier_tests=(
+  "0:0" "10:0" "19:0" "20:0" "21:1" "40:1"
+  "41:2" "60:2" "61:3" "80:3" "81:4" "100:4"
+)
+for test_pair in "${tier_tests[@]}"; do
+  percent="${test_pair%:*}"
+  expected="${test_pair#*:}"
+  result=$(get_context_tier "${percent}")
+  test "get_context_tier ${percent}%" "${expected}" "${result}"
+done
 
 # Test edge cases
 echo ""
@@ -127,30 +111,6 @@ test "get_context_message 0%" "non-empty" "${result}"
 msg=$(get_context_message 100)
 result=$([[ -n "${msg}" ]] && echo "non-empty")
 test "get_context_message 100%" "non-empty" "${result}"
-
-# Test get_context_tier()
-echo ""
-echo "Testing get_context_tier()..."
-result=$(get_context_tier 10)
-test "get_context_tier 10%" "0" "${result}"
-result=$(get_context_tier 20)
-test "get_context_tier 20%" "0" "${result}"
-result=$(get_context_tier 21)
-test "get_context_tier 21%" "1" "${result}"
-result=$(get_context_tier 40)
-test "get_context_tier 40%" "1" "${result}"
-result=$(get_context_tier 41)
-test "get_context_tier 41%" "2" "${result}"
-result=$(get_context_tier 60)
-test "get_context_tier 60%" "2" "${result}"
-result=$(get_context_tier 61)
-test "get_context_tier 61%" "3" "${result}"
-result=$(get_context_tier 80)
-test "get_context_tier 80%" "3" "${result}"
-result=$(get_context_tier 81)
-test "get_context_tier 81%" "4" "${result}"
-result=$(get_context_tier 100)
-test "get_context_tier 100%" "4" "${result}"
 
 # Test validate_directory() - security function
 echo ""

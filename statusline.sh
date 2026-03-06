@@ -64,11 +64,8 @@ sep() { echo -n " ${SEPARATOR} "; }
 
 # Conditional append helper (DRY pattern)
 append_if() {
-  local value="$1"
-  local text="$2"
-  if [[ "${value}" != "0" ]] 2>/dev/null && [[ -n "${value}" ]] && [[ "${value}" != "${NULL_VALUE}" ]]; then
-    echo -n " ${text}"
-  fi
+  local value="$1" text="$2"
+  [[ "${value}" != "0" ]] 2>/dev/null && [[ -n "${value}" ]] && [[ "${value}" != "${NULL_VALUE}" ]] && echo -n " ${text}"
 }
 
 # Validate directory path for security
@@ -132,28 +129,9 @@ format_number() {
 # Returns: ANSI color escape sequence
 # Bash 3.2 compatible: uses pipe-delimited string instead of arrays
 get_random_message_color() {
-  local colors="${GREEN}|${CYAN}|${BLUE}|${MAGENTA}|${ORANGE}"
-  local colors_count=5
-
-  # Better distribution than simple modulo (reduces bias)
-  local index=$(( (RANDOM * colors_count) / 32768 ))
-
-  # Extract color using parameter expansion (Bash 3.2 compatible)
-  local i=0
-  local saved_ifs="${IFS}"
-  IFS='|'
-  for color in ${colors}; do
-    if [[ ${i} -eq ${index} ]]; then
-      IFS="${saved_ifs}"
-      echo "${color}"
-      return 0
-    fi
-    ((i++))
-  done
-  IFS="${saved_ifs}"
-
-  # Fallback (should never reach)
-  echo "${CYAN}"
+  local colors=("${GREEN}" "${CYAN}" "${BLUE}" "${MAGENTA}" "${ORANGE}")
+  local index=$(( (RANDOM * ${#colors[@]}) / 32768 ))
+  echo "${colors[${index}]}"
 }
 
 # ============================================================
@@ -290,12 +268,8 @@ parse_claude_input() {
 build_progress_bar() {
   local percent="$1"
 
-  # Clamp percent to 0-100 range (prevent negative/overflow)
-  if [[ ${percent} -lt 0 ]]; then
-    percent=0
-  elif [[ ${percent} -gt 100 ]]; then
-    percent=100
-  fi
+  # Clamp percent to 0-100 range using ternary arithmetic
+  (( percent = percent < 0 ? 0 : (percent > 100 ? 100 : percent) ))
 
   local filled=$((percent * BAR_WIDTH / 100))
   local empty=$((BAR_WIDTH - filled))
@@ -366,9 +340,8 @@ get_context_message() {
 parse_git_status_output() {
   local output="$1"
   local line branch="" ahead="0" behind="0" total_files=0
-  local saved_ifs="${IFS}"
 
-  # Parse with IFS isolated to this function
+  # Parse git status output
   while IFS= read -r line; do
     case "${line}" in
       "# branch.head "*)
@@ -392,9 +365,6 @@ parse_git_status_output() {
   done << EOF
 ${output}
 EOF
-
-  # Restore IFS
-  IFS="${saved_ifs}"
 
   # Default values
   branch="${branch:-(detached HEAD)}"
@@ -499,13 +469,11 @@ format_git_dirty() {
 format_git_info() {
   local git_data="$1"
 
-  # Parse state with IFS protection
-  local state saved_ifs
-  saved_ifs="${IFS}"
+  # Parse state
+  local state
   IFS='|' read -r state _ << EOF
 ${git_data}
 EOF
-  IFS="${saved_ifs}"
 
   case "${state}" in
     "${STATE_NOT_REPO}")
@@ -516,11 +484,9 @@ EOF
       ;;
     "${STATE_CLEAN}")
       local branch ahead behind
-      saved_ifs="${IFS}"
       IFS='|' read -r _ branch ahead behind << EOF
 ${git_data}
 EOF
-      IFS="${saved_ifs}"
       # Returns "git_output|file_count" (empty file count for clean)
       local clean_msg
       clean_msg=$(format_git_clean "${branch}" "${ahead}" "${behind}")
@@ -528,11 +494,9 @@ EOF
       ;;
     "${STATE_DIRTY}")
       local branch files ahead behind
-      saved_ifs="${IFS}"
       IFS='|' read -r _ branch files ahead behind << EOF
 ${git_data}
 EOF
-      IFS="${saved_ifs}"
       # Already returns "git_output|file_count"
       format_git_dirty "${branch}" "${files}" "${ahead}" "${behind}"
       ;;
@@ -616,19 +580,15 @@ build_git_component() {
   git_data=$(get_git_info "${current_dir}")
 
   # format_git_info returns "git_output|file_count" format
-  local formatted git_line file_line saved_ifs
+  local formatted git_line file_line
   formatted=$(format_git_info "${git_data}")
-  saved_ifs="${IFS}"
   IFS='|' read -r git_line file_line <<< "${formatted}"
-  IFS="${saved_ifs}"
 
   # Extract state to determine emoji placement
   local state
-  saved_ifs="${IFS}"
   IFS='|' read -r state _ << EOF
 ${git_data}
 EOF
-  IFS="${saved_ifs}"
 
   # Return git info and file count separately: "git_display|file_count"
   if [[ "${state}" = "${STATE_NOT_REPO}" ]]; then
@@ -773,11 +733,9 @@ EOF
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"
-  local git_with_files file_count saved_ifs
+  local git_with_files file_count
   git_with_files=$(build_git_component "${current_dir}")
-  saved_ifs="${IFS}"
   IFS='|' read -r git_part file_count <<< "${git_with_files}"
-  IFS="${saved_ifs}"
 
   files_part=$(build_files_component "${file_count}")
   cost_part=$(build_cost_component "${cost_usd}")
