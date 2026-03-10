@@ -21,6 +21,17 @@ strip_ansi() {
   sed -E 's/\x1b\[[0-9;]*m//g'
 }
 
+run_statusline() {
+  local json_input="$1"
+  local exit_code=0
+  local output
+
+  output=$(printf '%s' "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
+
+  printf '%s\n' "${exit_code}"
+  printf '%s' "${output}"
+}
+
 # Test helper
 run_test() {
   local test_name="$1"
@@ -29,11 +40,16 @@ run_test() {
 
   TOTAL=$((TOTAL + 1))
 
-  local output
+  local run_output
   local clean_output
   local exit_code=0
-  output=$(echo "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
-  clean_output=$(echo "${output}" | strip_ansi)
+  local output
+  run_output=$(run_statusline "${json_input}")
+  {
+    IFS= read -r exit_code
+    output=$(cat)
+  } <<< "${run_output}"
+  clean_output=$(printf '%s' "${output}" | strip_ansi)
 
   if [[ ${exit_code} -ne 0 ]]; then
     echo -e "${RED}✗${NC} ${test_name}"

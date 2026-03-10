@@ -6,12 +6,16 @@ set -euo pipefail
 # Source the statusline functions by extracting everything except the main call
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Create a temporary file with statusline functions (remove last line which calls main)
-TEMP_FILE=$(mktemp)
-sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
-# shellcheck source=/dev/null  # Dynamic temp file - runtime-generated content
-source "${TEMP_FILE}"
-rm -f "${TEMP_FILE}"
+source_statusline_functions() {
+  local temp_file
+  temp_file=$(mktemp)
+  sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${temp_file}"
+  # shellcheck source=/dev/null  # Dynamic temp file - runtime-generated content
+  source "${temp_file}"
+  rm -f "${temp_file}"
+}
+
+source_statusline_functions
 
 passed=0
 failed=0

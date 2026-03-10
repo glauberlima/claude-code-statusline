@@ -165,8 +165,8 @@ check_dependencies() {
     missing+=("bash 3.2+")
   fi
   command -v claude >/dev/null 2>&1 || missing+=("claude")
-  command -v curl   >/dev/null 2>&1 || missing+=("curl")
-  command -v node   >/dev/null 2>&1 || missing+=("node")
+  command -v curl >/dev/null 2>&1 || missing+=("curl")
+  command -v node >/dev/null 2>&1 || missing+=("node")
   set +e
   check_git_version
   status=$?
@@ -281,21 +281,20 @@ download_file() {
 
 validate_file() {
   local file="$1"
-  local content
+  local first_line
 
   if [[ ! -s "${file}" ]]; then
     error "File does not exist or is empty"
     return 1
   fi
 
-  content=$(cat "${file}" 2>/dev/null) || return 1
-
-  if ! echo "${content}" | head -n1 | grep -q '^#!/.*bash'; then
+  IFS= read -r first_line < "${file}" || return 1
+  if [[ ! "${first_line}" =~ ^#!/.*bash ]]; then
     error "Invalid file format (missing bash shebang)"
     return 1
   fi
 
-  if ! echo "${content}" | grep -q 'assemble_statusline'; then
+  if ! grep -q 'assemble_statusline' "${file}"; then
     error "File does not appear to be statusline.sh"
     return 1
   fi

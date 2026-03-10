@@ -37,15 +37,28 @@ show_usage() {
   echo "  $0 statusline.sh messages/es.json --no-cost"
 }
 
+fail() {
+  echo "Error: $1" >&2
+  exit 1
+}
+
+require_node() {
+  command -v node >/dev/null 2>&1 || {
+    echo "Error: node is required but not installed" >&2
+    echo "Install Node.js from https://nodejs.org" >&2
+    exit 1
+  }
+}
+
 # Shared helper: replace the block between start_marker and end_marker in file
 # with new_content (pre-built string), then atomically overwrite file.
 _replace_marker_block() {
   local file="$1" start_marker="$2" end_marker="$3" new_content="$4"
   local tmp
   tmp=$(mktemp)
-  sed -n "1,/${start_marker}/p" "${file}" > "${tmp}"
-  printf '%s\n' "${new_content}" >> "${tmp}"
-  sed -n "/${end_marker}/,\$p" "${file}" >> "${tmp}"
+  sed -n "1,/${start_marker}/p" "${file}" > "${tmp}" || return 1
+  printf '%s\n' "${new_content}" >> "${tmp}" || return 1
+  sed -n "/${end_marker}/,\$p" "${file}" >> "${tmp}" || return 1
   chmod +x "${tmp}"
   mv "${tmp}" "${file}"
 }
@@ -144,31 +157,23 @@ main() {
 
   # Validate statusline file exists
   if [[ ! -f "${statusline_file}" ]]; then
-    echo "Error: File not found: ${statusline_file}" >&2
-    exit 1
+    fail "File not found: ${statusline_file}"
   fi
 
   # Validate JSON file if provided
   if [[ -n "${language_json}" ]] && [[ ! -f "${language_json}" ]]; then
-    echo "Error: JSON file not found: ${language_json}" >&2
-    exit 1
+    fail "JSON file not found: ${language_json}"
   fi
 
   # Check node dependency (required for JSON parsing)
-  command -v node >/dev/null 2>&1 || {
-    echo "Error: node is required but not installed" >&2
-    echo "Install Node.js from https://nodejs.org" >&2
-    exit 1
-  }
+  require_node
 
   # Validate markers exist
   if ! grep -q '@CONFIG_START' "${statusline_file}"; then
-    echo "Error: @CONFIG_START marker not found in ${statusline_file}" >&2
-    exit 1
+    fail "@CONFIG_START marker not found in ${statusline_file}"
   fi
   if ! grep -q '@MESSAGES_START' "${statusline_file}"; then
-    echo "Error: @MESSAGES_START marker not found in ${statusline_file}" >&2
-    exit 1
+    fail "@MESSAGES_START marker not found in ${statusline_file}"
   fi
 
   # Perform patching
@@ -183,8 +188,7 @@ main() {
     # Validate JSON syntax
     if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
          "${language_json}" 2>/dev/null; then
-      echo "Error: Invalid JSON in ${language_json}" >&2
-      exit 1
+      fail "Invalid JSON in ${language_json}"
     fi
 
     replace_messages_block "${statusline_file}" "${language_json}"
@@ -196,8 +200,7 @@ main() {
   # 3. Validate output
   if ! bash -n "${statusline_file}" 2>&1; then
     echo ""
-    echo "Error: Patched script has syntax errors" >&2
-    exit 1
+    fail "Patched script has syntax errors"
   fi
 
   echo ""

@@ -186,6 +186,18 @@ get_context_tier() {
   fi
 }
 
+read_pipe_fields() {
+  local data="$1"
+  shift
+
+  local saved_ifs="${IFS}"
+  IFS='|'
+  read -r "$@" << EOF
+${data}
+EOF
+  IFS="${saved_ifs}"
+}
+
 parse_claude_input() {
   local input="$1"
 
@@ -484,10 +496,11 @@ format_git_not_repo() {
   echo " ${ORANGE}(not a git repository)${NC}"
 }
 
-format_git_clean() {
-  local branch="$1" ahead="$2" behind="$3"
+format_git_branch() {
+  local branch="$1"
+  local ahead="$2"
+  local behind="$3"
 
-  # Simple format: branch + ahead/behind (no parentheses)
   local output="${MAGENTA}${branch}${NC}"
   local ahead_behind
   ahead_behind=$(format_ahead_behind "${ahead}" "${behind}")
@@ -496,29 +509,25 @@ format_git_clean() {
   echo " ${output}"
 }
 
+format_git_clean() {
+  format_git_branch "$1" "$2" "$3"
+}
+
 format_git_dirty() {
   local branch="$1" files="$2" ahead="$3" behind="$4"
+  local git_output
 
-  # Simple branch + ahead/behind (no file count, no line changes)
-  local output="${MAGENTA}${branch}${NC}"
-  local ahead_behind
-  ahead_behind=$(format_ahead_behind "${ahead}" "${behind}")
-  [[ -n "${ahead_behind}" ]] && output+="${ahead_behind}"
+  git_output=$(format_git_branch "${branch}" "${ahead}" "${behind}")
 
   # Return git info and file count separately: "git_output|file_count"
-  echo " ${output}|${files}"
+  echo "${git_output}|${files}"
 }
 
 format_git_info() {
   local git_data="$1"
 
-  # Parse state with IFS protection
-  local state saved_ifs
-  saved_ifs="${IFS}"
-  IFS='|' read -r state _ << EOF
-${git_data}
-EOF
-  IFS="${saved_ifs}"
+  local state
+  read_pipe_fields "${git_data}" state _
 
   case "${state}" in
     "${STATE_NOT_REPO}")
@@ -529,11 +538,7 @@ EOF
       ;;
     "${STATE_CLEAN}")
       local branch ahead behind
-      saved_ifs="${IFS}"
-      IFS='|' read -r _ branch ahead behind << EOF
-${git_data}
-EOF
-      IFS="${saved_ifs}"
+      read_pipe_fields "${git_data}" unused branch ahead behind
       # Returns "git_output|file_count" (empty file count for clean)
       local clean_msg
       clean_msg=$(format_git_clean "${branch}" "${ahead}" "${behind}")
@@ -541,11 +546,7 @@ EOF
       ;;
     "${STATE_DIRTY}")
       local branch files ahead behind
-      saved_ifs="${IFS}"
-      IFS='|' read -r _ branch files ahead behind << EOF
-${git_data}
-EOF
-      IFS="${saved_ifs}"
+      read_pipe_fields "${git_data}" unused branch files ahead behind
       # Already returns "git_output|file_count"
       format_git_dirty "${branch}" "${files}" "${ahead}" "${behind}"
       ;;
@@ -600,6 +601,7 @@ build_context_component() {
 
 build_directory_component() {
   local current_dir="$1"
+  local dir_name
   local is_valid_dir=1
 
   if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]]; then
@@ -607,7 +609,6 @@ build_directory_component() {
     is_valid_dir=$?
   fi
 
-  local dir_name
   if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]] && [[ "${is_valid_dir}" -eq 0 ]]; then
     dir_name=$(get_dirname "${current_dir}")
   else
@@ -624,19 +625,13 @@ build_git_component() {
   git_data=$(get_git_info "${current_dir}")
 
   # format_git_info returns "git_output|file_count" format
-  local formatted git_line file_line saved_ifs
+  local formatted git_line file_line
   formatted=$(format_git_info "${git_data}")
-  saved_ifs="${IFS}"
-  IFS='|' read -r git_line file_line <<< "${formatted}"
-  IFS="${saved_ifs}"
+  read_pipe_fields "${formatted}" git_line file_line
 
   # Extract state to determine emoji placement
   local state
-  saved_ifs="${IFS}"
-  IFS='|' read -r state _ << EOF
-${git_data}
-EOF
-  IFS="${saved_ifs}"
+  read_pipe_fields "${git_data}" state _
 
   # Return git info and file count separately: "git_display|file_count"
   if [[ "${state}" = "${STATE_NOT_REPO}" ]]; then
@@ -650,7 +645,7 @@ build_files_component() {
   local file_count="$1"
 
   # Only show if there are modified files
-  if [[ -n "${file_count}" && "${file_count}" != "0" ]]; then
+  if [[ -n "${file_count}" ]] && [[ "${file_count}" != "${NULL_VALUE}" ]] && [[ "${file_count}" != "0" ]]; then
     echo "${CHANGE_ICON} ${ORANGE}changes${NC}"
   fi
 }
@@ -662,7 +657,7 @@ build_cost_component() {
   [[ "${SHOW_COST}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
-  if [[ -n "${cost_usd}" && "${cost_usd}" != "0" && "${cost_usd}" != "${NULL_VALUE}" ]]; then
+  if [[ -n "${cost_usd}" ]] && [[ "${cost_usd}" != "${NULL_VALUE}" ]] && [[ "${cost_usd}" != "0" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
       # Use LC_NUMERIC=C to ensure decimal point (not comma) for printf on Windows
@@ -749,7 +744,7 @@ main() {
 
   # Validate field count (expected: 6 lines)
   local line_count
-  line_count=$(echo "${parsed}" | wc -l)
+  line_count=$(printf '%s\n' "${parsed}" | wc -l)
   if [[ ${line_count} -ne 6 ]]; then
     echo "Error: Expected 6 fields from JSON, got ${line_count}" >&2
     exit 1
