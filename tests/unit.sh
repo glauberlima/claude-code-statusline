@@ -13,15 +13,18 @@ sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${TEMP_FILE}"
 source "${TEMP_FILE}"
 rm -f "${TEMP_FILE}"
 
-# Messages are now hardcoded in statusline.sh via @MESSAGES_START block
-
-# Colors are already defined in statusline.sh as readonly
-# RED, GREEN, NC, CYAN, BLUE, MAGENTA, ORANGE are available from sourced file
-# shellcheck disable=SC2154
-: "${RED:?}" "${GREEN:?}" "${NC:?}" "${CYAN:?}" "${BLUE:?}" "${MAGENTA:?}" "${ORANGE:?}"
-
 passed=0
 failed=0
+bar_width=$(eval 'printf "%s" "${BAR_WIDTH}"')
+show_messages=$(eval 'printf "%s" "${SHOW_MESSAGES}"')
+show_cost=$(eval 'printf "%s" "${SHOW_COST}"')
+red=$(eval 'printf "%s" "${RED}"')
+green=$(eval 'printf "%s" "${GREEN}"')
+nc=$(eval 'printf "%s" "${NC}"')
+cyan=$(eval 'printf "%s" "${CYAN}"')
+blue=$(eval 'printf "%s" "${BLUE}"')
+magenta=$(eval 'printf "%s" "${MAGENTA}"')
+orange=$(eval 'printf "%s" "${ORANGE}"')
 
 test() {
   local name="$1"
@@ -29,14 +32,18 @@ test() {
   local actual="$3"
 
   if [[ "${expected}" == "${actual}" ]]; then
-    echo -e "${GREEN}✓${NC} ${name}"
+    echo -e "${green}✓${nc} ${name}"
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} ${name}"
+    echo -e "${red}✗${nc} ${name}"
     echo "  Expected: ${expected}"
     echo "  Got:      ${actual}"
     failed=$((failed + 1))
   fi
+}
+
+strip_ansi() {
+  sed -E $'s/\033\\[[0-9;]*m//g; s/\\\\033\\[[0-9;]*m//g'
 }
 
 echo "========================================="
@@ -71,16 +78,28 @@ test "format_number 1000000" "1.0M" "${result}"
 result=$(format_number 10000000)
 test "format_number 10000000" "10M" "${result}"
 
+# Test clamp_percent()
+echo ""
+echo "Testing clamp_percent()..."
+result=$(clamp_percent -10)
+test "clamp_percent negative" "0" "${result}"
+result=$(clamp_percent 28)
+test "clamp_percent valid" "28" "${result}"
+result=$(clamp_percent 120)
+test "clamp_percent overflow" "100" "${result}"
+result=$(clamp_percent "bad")
+test "clamp_percent invalid" "0" "${result}"
+
 # Test get_context_message() returns non-empty strings
 echo ""
 echo "Testing get_context_message()..."
 for percent in 10 25 50 75 95; do
   message=$(get_context_message "${percent}")
   if [[ -n "${message}" ]]; then
-    echo -e "${GREEN}✓${NC} get_context_message ${percent}% returned: \"${message}\""
+    echo -e "${green}✓${nc} get_context_message ${percent}% returned: \"${message}\""
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} get_context_message ${percent}% returned empty"
+    echo -e "${red}✗${nc} get_context_message ${percent}% returned empty"
     failed=$((failed + 1))
   fi
 done
@@ -172,14 +191,14 @@ test "validate_directory path with dot (safe)" "pass" "${result}"
 # Test build_model_component()
 echo ""
 echo "Testing build_model_component()..."
-result=$(build_model_component "claude-3-opus" | sed -E 's/\\033\[[0-9;]*m//g')
+result=$(build_model_component "claude-3-opus" | strip_ansi)
 expected="🤖 claude-3-opus"
 test "build_model_component" "${expected}" "${result}"
 
 # Test build_cost_component() with security validation
 echo ""
 echo "Testing build_cost_component()..."
-result=$(build_cost_component "1.50" | sed -E 's/\\033\[[0-9;]*m//g')
+result=$(build_cost_component "1.50" | strip_ansi)
 expected="💰 \$1.50"
 test "build_cost_component valid cost" "${expected}" "${result}"
 result=$(build_cost_component "0")
@@ -192,10 +211,10 @@ test "build_cost_component non-numeric (should be empty)" "" "${result}"
 # Test build_files_component()
 echo ""
 echo "Testing build_files_component()..."
-result=$(build_files_component "5" | sed -E 's/\\033\[[0-9;]*m//g')
+result=$(build_files_component "5" | strip_ansi)
 expected="✏️ changes"
 test "build_files_component 5 files" "${expected}" "${result}"
-result=$(build_files_component "1" | sed -E 's/\\033\[[0-9;]*m//g')
+result=$(build_files_component "1" | strip_ansi)
 expected="✏️ changes"
 test "build_files_component 1 file" "${expected}" "${result}"
 result=$(build_files_component "0")
@@ -210,43 +229,154 @@ echo "Testing component toggle configuration..."
 # which are set at source time from @CONFIG_START block
 
 # Test context component (reads from global SHOW_MESSAGES)
-temp_result=$(build_context_component "200000" "50000" | sed -E 's/\033\[[0-9;]*m//g')
-# shellcheck disable=SC2154  # SHOW_MESSAGES is sourced from statusline.sh
-if [[ "${SHOW_MESSAGES}" == "true" ]]; then
+temp_result=$(build_context_component "200000" "50000" "25" | strip_ansi)
+if [[ "${show_messages}" == "true" ]]; then
   if echo "${temp_result}" | grep -qE '\|'; then
-    echo -e "${GREEN}✓${NC} Context component with SHOW_MESSAGES=true shows separator"
+    echo -e "${green}✓${nc} Context component with SHOW_MESSAGES=true shows separator"
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} Context component doesn't show separator when SHOW_MESSAGES=true"
+    echo -e "${red}✗${nc} Context component doesn't show separator when SHOW_MESSAGES=true"
     failed=$((failed + 1))
   fi
 else
   if echo "${temp_result}" | grep -qE '\|'; then
-    echo -e "${RED}✗${NC} Context component with SHOW_MESSAGES=false still shows separator"
+    echo -e "${red}✗${nc} Context component with SHOW_MESSAGES=false still shows separator"
     failed=$((failed + 1))
   else
-    echo -e "${GREEN}✓${NC} Context component respects SHOW_MESSAGES=false"
+    echo -e "${green}✓${nc} Context component respects SHOW_MESSAGES=false"
     passed=$((passed + 1))
   fi
 fi
 
+echo ""
+echo "Testing parse_claude_input()..."
+parsed=$(parse_claude_input '{
+  "model": {"id": "claude-sonnet-4-6"},
+  "workspace": {"project_dir": "/tmp/project-dir"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {
+      "input_tokens": 1000,
+      "output_tokens": 500,
+      "cache_creation_input_tokens": 200,
+      "cache_read_input_tokens": 300
+    },
+    "used_percentage": 17
+  },
+  "cost": {"total_cost_usd": 1.25}
+}')
+parsed_line_1=""
+parsed_line_2=""
+parsed_line_3=""
+parsed_line_4=""
+parsed_line_5=""
+parsed_line_6=""
+{
+  read -r parsed_line_1
+  read -r parsed_line_2
+  read -r parsed_line_3
+  read -r parsed_line_4
+  read -r parsed_line_5
+  read -r parsed_line_6
+} <<< "${parsed}"
+test "parse_claude_input model fallback" "claude-sonnet-4-6" "${parsed_line_1}"
+test "parse_claude_input project_dir fallback" "/tmp/project-dir" "${parsed_line_2}"
+test "parse_claude_input context size" "200000" "${parsed_line_3}"
+test "parse_claude_input current usage includes output tokens" "2000" "${parsed_line_4}"
+test "parse_claude_input used_percentage" "17" "${parsed_line_5}"
+test "parse_claude_input cost" "1.25" "${parsed_line_6}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Test"},
+  "workspace": {"current_dir": "/tmp/fallback"},
+  "context_window": {
+    "context_window_size": 1000,
+    "used_percentage": 25
+  }
+}')
+{
+  read -r _
+  read -r _
+  read -r _
+  read -r parsed_line_4
+  read -r parsed_line_5
+  read -r _
+} <<< "${parsed}"
+test "parse_claude_input keeps current usage at zero when counters are missing" "0" "${parsed_line_4}"
+test "parse_claude_input keeps explicit percentage" "25" "${parsed_line_5}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Test"},
+  "workspace": {"current_dir": "/tmp/fallback"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 150
+  }
+}')
+{
+  read -r _
+  read -r _
+  read -r _
+  read -r _
+  read -r parsed_line_5
+  read -r _
+} <<< "${parsed}"
+test "parse_claude_input preserves raw used_percentage before clamp" "150" "${parsed_line_5}"
+
+echo ""
+echo "Testing build_context_component()..."
+result=$(build_context_component "200000" "55460" "28" | strip_ansi)
+if echo "${result}" | grep -q "28% 55K/200K"; then
+  echo -e "${green}✓${nc} build_context_component uses provided percentage and formatted usage"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component missing expected percentage/usage"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+result=$(build_context_component "200000" "2000" "150" | strip_ansi)
+if echo "${result}" | grep -q "100% 2.0K/200K"; then
+  echo -e "${green}✓${nc} build_context_component clamps overflow percentage"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component failed to clamp overflow percentage"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+result=$(build_context_component "200000" "2000" "-5" | strip_ansi)
+if echo "${result}" | grep -q "0% 2.0K/200K"; then
+  echo -e "${green}✓${nc} build_context_component clamps negative percentage"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component failed to clamp negative percentage"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+
+echo ""
+echo "Testing build_directory_component()..."
+result=$(build_directory_component "/tmp/my-project" | strip_ansi)
+test "build_directory_component valid path" "📁 my-project" "${result}"
+result=$(build_directory_component "../../etc" | strip_ansi)
+test "build_directory_component invalid path falls back to PWD" "📁 $(basename "${PWD}")" "${result}"
+
 # Test cost component (reads from global SHOW_COST)
 temp_result=$(build_cost_component "1.50")
-# shellcheck disable=SC2154  # SHOW_COST is sourced from statusline.sh
-if [[ "${SHOW_COST}" == "true" ]]; then
+if [[ "${show_cost}" == "true" ]]; then
   if [[ -n "${temp_result}" ]]; then
-    echo -e "${GREEN}✓${NC} Cost component with SHOW_COST=true shows cost"
+    echo -e "${green}✓${nc} Cost component with SHOW_COST=true shows cost"
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} Cost component doesn't show cost when enabled"
+    echo -e "${red}✗${nc} Cost component doesn't show cost when enabled"
     failed=$((failed + 1))
   fi
 else
   if [[ -z "${temp_result}" ]]; then
-    echo -e "${GREEN}✓${NC} Cost component respects SHOW_COST=false"
+    echo -e "${green}✓${nc} Cost component respects SHOW_COST=false"
     passed=$((passed + 1))
   else
-    echo -e "${RED}✗${NC} Cost component with SHOW_COST=false shows cost: ${temp_result}"
+    echo -e "${red}✗${nc} Cost component with SHOW_COST=false shows cost: ${temp_result}"
     failed=$((failed + 1))
   fi
 fi
@@ -255,57 +385,52 @@ fi
 echo ""
 echo "Testing build_progress_bar() UTF-8 handling..."
 
-# shellcheck disable=SC2154  # BAR_WIDTH, BAR_FILLED, BAR_EMPTY sourced from statusline.sh
-
 # Build a 50% progress bar
 bar_50=$(build_progress_bar 50)
 
 # Strip ANSI codes for verification
-bar_stripped=$(echo -e "${bar_50}" | sed 's/\x1b\[[0-9;]*m//g')
+bar_stripped=$(echo -e "${bar_50}" | strip_ansi)
 
 # Count UTF-8 characters (should be BAR_WIDTH total)
 char_count=$(( $(echo -n "${bar_stripped}" | wc -m) ))
-# shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
-test "progress bar character count (50%)" "${BAR_WIDTH}" "${char_count}"
+test "progress bar character count (50%)" "${bar_width}" "${char_count}"
 
 # Verify no broken encoding (no question marks or replacement chars)
 if echo "${bar_stripped}" | grep -q "?"; then
-  echo -e "${RED}✗${NC} UTF-8 encoding broken (found '?')"
+  echo -e "${red}✗${nc} UTF-8 encoding broken (found '?')"
   failed=$((failed + 1))
 else
-  echo -e "${GREEN}✓${NC} UTF-8 encoding intact (no '?')"
+  echo -e "${green}✓${nc} UTF-8 encoding intact (no '?')"
   passed=$((passed + 1))
 fi
 
 # Verify correct Unicode characters are used
 if echo "${bar_stripped}" | grep -q "█"; then
-  echo -e "${GREEN}✓${NC} Uses Unicode filled block (█)"
+  echo -e "${green}✓${nc} Uses Unicode filled block (█)"
   passed=$((passed + 1))
 else
-  echo -e "${RED}✗${NC} Missing Unicode filled block"
+  echo -e "${red}✗${nc} Missing Unicode filled block"
   failed=$((failed + 1))
 fi
 
 if echo "${bar_stripped}" | grep -q "░"; then
-  echo -e "${GREEN}✓${NC} Uses Unicode light shade (░)"
+  echo -e "${green}✓${nc} Uses Unicode light shade (░)"
   passed=$((passed + 1))
 else
-  echo -e "${RED}✗${NC} Missing Unicode light shade"
+  echo -e "${red}✗${nc} Missing Unicode light shade"
   failed=$((failed + 1))
 fi
 
 # Test edge cases
 bar_0=$(build_progress_bar 0)
-bar_0_stripped=$(echo -e "${bar_0}" | sed 's/\x1b\[[0-9;]*m//g')
+bar_0_stripped=$(echo -e "${bar_0}" | strip_ansi)
 empty_0_count=$(( $(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l) ))
-# shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
-test "0% progress bar (all empty)" "${BAR_WIDTH}" "${empty_0_count}"
+test "0% progress bar (all empty)" "${bar_width}" "${empty_0_count}"
 
 bar_100=$(build_progress_bar 100)
-bar_100_stripped=$(echo -e "${bar_100}" | sed 's/\x1b\[[0-9;]*m//g')
+bar_100_stripped=$(echo -e "${bar_100}" | strip_ansi)
 filled_100_count=$(( $(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l) ))
-# shellcheck disable=SC2154  # BAR_WIDTH sourced from statusline.sh
-test "100% progress bar (all filled)" "${BAR_WIDTH}" "${filled_100_count}"
+test "100% progress bar (all filled)" "${bar_width}" "${filled_100_count}"
 
 # Test get_random_message_color()
 echo ""
@@ -313,12 +438,12 @@ echo "Testing get_random_message_color()..."
 
 # Helper functions for pass/fail
 pass() {
-  echo -e "${GREEN}✓${NC} $1"
+  echo -e "${green}✓${nc} $1"
   passed=$((passed + 1))
 }
 
 fail() {
-  echo -e "${RED}✗${NC} $1"
+  echo -e "${red}✗${nc} $1"
   failed=$((failed + 1))
 }
 
@@ -327,7 +452,7 @@ color=$(get_random_message_color)
 
 # Verify it's one of the 5 valid colors
 valid=false
-for expected in "${GREEN}" "${CYAN}" "${BLUE}" "${MAGENTA}" "${ORANGE}"; do
+for expected in "${green}" "${cyan}" "${blue}" "${magenta}" "${orange}"; do
   [[ "${color}" == "${expected}" ]] && valid=true && break
 done
 
@@ -419,15 +544,14 @@ done
 
 echo ""
 echo "========================================="
-echo -e "Tests passed: ${GREEN}${passed}${NC}"
-echo -e "Tests failed: ${RED}${failed}${NC}"
+echo -e "Tests passed: ${green}${passed}${nc}"
+echo -e "Tests failed: ${red}${failed}${nc}"
 echo "========================================="
 
 if [[ "${failed}" -eq 0 ]]; then
-  echo -e "${GREEN}All tests passed!${NC}"
+  echo -e "${green}All tests passed!${nc}"
   exit 0
 else
-  echo -e "${RED}Some tests failed!${NC}"
+  echo -e "${red}Some tests failed!${nc}"
   exit 1
 fi
-

@@ -150,6 +150,8 @@ Re-run the installer to change language or toggle features. Use the same command
 ./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh
 ```
 
+ShellCheck reference: https://www.shellcheck.net/
+
 ### Contributing
 
 1. Fork and create a feature branch

@@ -62,15 +62,6 @@ readonly CONTEXT_MSG_CRITICAL=('living dangerously' 'pushing the limits' 'housto
 get_dirname() { local p="${1//\\//}"; echo "${p##*/}"; }
 sep() { echo -n " ${SEPARATOR} "; }
 
-# Conditional append helper (DRY pattern)
-append_if() {
-  local value="$1"
-  local text="$2"
-  if [[ "${value}" != "0" ]] 2>/dev/null && [[ -n "${value}" ]] && [[ "${value}" != "${NULL_VALUE}" ]]; then
-    echo -n " ${text}"
-  fi
-}
-
 # Validate directory path for security
 # Rejects path traversal (..), tilde expansion (~), and shell metacharacters
 validate_directory() {
@@ -124,6 +115,23 @@ format_number() {
     else
       echo "${m}M"
     fi
+  fi
+}
+
+clamp_percent() {
+  local percent="$1"
+
+  if [[ ! "${percent}" =~ ^-?[0-9]+$ ]]; then
+    echo 0
+    return 0
+  fi
+
+  if [[ "${percent}" -lt 0 ]]; then
+    echo 0
+  elif [[ "${percent}" -gt 100 ]]; then
+    echo 100
+  else
+    echo "${percent}"
   fi
 }
 
@@ -191,10 +199,12 @@ parse_claude_input() {
     END {
       model_block  = obj_content(doc, "model")
       model_name   = str_val(model_block, "display_name")
+      if (model_name == "") model_name = str_val(model_block, "id")
       if (model_name == "") model_name = "null"
 
-      ws_block    = obj_content(doc, "workspace")
-      current_dir = str_val(ws_block, "current_dir")
+      ws_block     = obj_content(doc, "workspace")
+      current_dir  = str_val(ws_block, "current_dir")
+      if (current_dir == "") current_dir = str_val(ws_block, "project_dir")
       if (current_dir == "") current_dir = "null"
 
       cw_block     = obj_content(doc, "context_window")
@@ -203,9 +213,17 @@ parse_claude_input() {
 
       cu_block       = obj_content(cw_block, "current_usage")
       input_tokens   = num_val(cu_block, "input_tokens")                   + 0
+      output_tokens  = num_val(cu_block, "output_tokens")                  + 0
       cache_creation = num_val(cu_block, "cache_creation_input_tokens")    + 0
       cache_read     = num_val(cu_block, "cache_read_input_tokens")        + 0
-      current_usage  = input_tokens + cache_creation + cache_read
+      current_usage  = input_tokens + output_tokens + cache_creation + cache_read
+
+      context_percent = num_val(cw_block, "used_percentage")
+      if (context_percent == "") {
+        context_percent = "0"
+      } else {
+        context_percent = int(context_percent + 0)
+      }
 
       cost_block = obj_content(doc, "cost")
       cost_usd   = num_val(cost_block, "total_cost_usd")
@@ -215,6 +233,7 @@ parse_claude_input() {
       print current_dir
       print context_size
       print current_usage
+      print context_percent
       print cost_usd
     }
 
@@ -288,14 +307,8 @@ parse_claude_input() {
 }
 
 build_progress_bar() {
-  local percent="$1"
-
-  # Clamp percent to 0-100 range (prevent negative/overflow)
-  if [[ ${percent} -lt 0 ]]; then
-    percent=0
-  elif [[ ${percent} -gt 100 ]]; then
-    percent=100
-  fi
+  local percent
+  percent=$(clamp_percent "$1")
 
   local filled=$((percent * BAR_WIDTH / 100))
   local empty=$((BAR_WIDTH - filled))
@@ -555,20 +568,9 @@ build_model_component() {
 build_context_component() {
   local context_size="$1"
   local current_usage="$2"
+  local context_percent="$3"
 
-  # Calculate percentage with division-by-zero protection
-  # Reorder arithmetic: multiply first, then divide (prevents division by zero when context_size < 100)
-  local context_percent=0
-  if [[ "${current_usage}" -gt 0 ]] && [[ "${context_size}" -gt 0 ]]; then
-    context_percent=$(( (current_usage * 100) / context_size ))
-
-    # Clamp to 0-100 range (prevent overflow)
-    if [[ ${context_percent} -gt 100 ]]; then
-      context_percent=100
-    elif [[ ${context_percent} -lt 0 ]]; then
-      context_percent=0
-    fi
-  fi
+  context_percent=$(clamp_percent "${context_percent}")
 
   # Get colored progress bar
   local bar
@@ -598,9 +600,15 @@ build_context_component() {
 
 build_directory_component() {
   local current_dir="$1"
+  local is_valid_dir=1
+
+  if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]]; then
+    validate_directory "${current_dir}"
+    is_valid_dir=$?
+  fi
 
   local dir_name
-  if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]]; then
+  if [[ -n "${current_dir}" ]] && [[ "${current_dir}" != "${NULL_VALUE}" ]] && [[ "${is_valid_dir}" -eq 0 ]]; then
     dir_name=$(get_dirname "${current_dir}")
   else
     dir_name=$(get_dirname "${PWD}")
@@ -739,21 +747,22 @@ main() {
     exit 1
   fi
 
-  # Validate field count (expected: 5 lines)
+  # Validate field count (expected: 6 lines)
   local line_count
   line_count=$(echo "${parsed}" | wc -l)
-  if [[ ${line_count} -ne 5 ]]; then
-    echo "Error: Expected 5 fields from JSON, got ${line_count}" >&2
+  if [[ ${line_count} -ne 6 ]]; then
+    echo "Error: Expected 6 fields from JSON, got ${line_count}" >&2
     exit 1
   fi
 
   # Extract fields
-  local model_name current_dir context_size current_usage cost_usd
+  local model_name current_dir context_size current_usage context_percent cost_usd
   {
     read -r model_name
     read -r current_dir
     read -r context_size
     read -r current_usage
+    read -r context_percent
     read -r cost_usd
   } << EOF
 ${parsed}
@@ -764,12 +773,13 @@ EOF
   current_dir="${current_dir%$'\r'}"
   context_size="${context_size%$'\r'}"
   current_usage="${current_usage%$'\r'}"
+  context_percent="${context_percent%$'\r'}"
   cost_usd="${cost_usd%$'\r'}"
 
   # Build components (read toggle flags from global constants)
   local model_part context_part dir_part git_part cost_part files_part
   model_part=$(build_model_component "${model_name}")
-  context_part=$(build_context_component "${context_size}" "${current_usage}")
+  context_part=$(build_context_component "${context_size}" "${current_usage}" "${context_percent}")
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"

@@ -10,6 +10,7 @@ set -euo pipefail
 readonly TARGET_DIR="${HOME}/.claude"
 readonly TARGET_FILE="${TARGET_DIR}/statusline.sh"
 readonly SETTINGS_FILE="${HOME}/.claude/settings.json"
+# shellcheck disable=SC2088  # Keep ~ literal so the command remains shell-safe for homes with spaces.
 readonly SETTINGS_COMMAND='~/.claude/statusline.sh'
 readonly GITHUB_BASE_URL="https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main"
 readonly EXIT_PARTIAL_FAILURE=2
@@ -154,14 +155,25 @@ check_git_version() {
 
 check_dependencies() {
   local missing=()
+  local status=0
 
-  # shellcheck disable=SC2310
-  check_bash_version    || missing+=("bash 3.2+")
+  set +e
+  check_bash_version
+  status=$?
+  set -e
+  if [[ ${status} -ne 0 ]]; then
+    missing+=("bash 3.2+")
+  fi
   command -v claude >/dev/null 2>&1 || missing+=("claude")
   command -v curl   >/dev/null 2>&1 || missing+=("curl")
   command -v node   >/dev/null 2>&1 || missing+=("node")
-  # shellcheck disable=SC2310
-  check_git_version     || missing+=("git 2.11+")
+  set +e
+  check_git_version
+  status=$?
+  set -e
+  if [[ ${status} -ne 0 ]]; then
+    missing+=("git 2.11+")
+  fi
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     show_install_instructions "${missing[@]}"
@@ -176,8 +188,13 @@ check_dependencies() {
   success "claude ${v_claude}"
   success "node ${v_node}"
   success "git ${v_git}"
-  # shellcheck disable=SC2310
-  is_wsl && muted "  Detected: WSL environment"
+  set +e
+  is_wsl
+  status=$?
+  set -e
+  if [[ ${status} -eq 0 ]]; then
+    muted "  Detected: WSL environment"
+  fi
 
   return 0
 }
@@ -185,8 +202,8 @@ check_dependencies() {
 show_install_instructions() {
   local deps=("$@")
   local platform
-  # shellcheck disable=SC2312
-  platform=$(uname -s 2>/dev/null || echo "Unknown")
+  platform=$(uname -s 2>/dev/null)
+  [[ -n "${platform}" ]] || platform="Unknown"
 
   error "Missing dependencies: ${deps[*]}"
   echo ""
@@ -206,8 +223,12 @@ show_install_instructions() {
       echo "  brew install curl git node"
       ;;
     Linux)
-      # shellcheck disable=SC2310
-      if is_wsl; then
+      local wsl_status=0
+      set +e
+      is_wsl
+      wsl_status=$?
+      set -e
+      if [[ ${wsl_status} -eq 0 ]]; then
         echo -e "${CYAN}Install on WSL:${NC}"
       else
         echo -e "${CYAN}Install on Linux:${NC}"
@@ -289,6 +310,8 @@ validate_file() {
 # Local mode: all files already present in current directory.
 # Remote mode: downloads statusline.sh, patch-statusline.sh, messages/*.json to TEMP_DIR.
 acquire_files() {
+  local status=0
+
   if [[ -f "./statusline.sh" && -f "./patch-statusline.sh" && -d "./messages" ]]; then
     INSTALL_MODE="local"
     WORKING_DIR="$(pwd)"
@@ -303,8 +326,11 @@ acquire_files() {
       *) ;;
     esac
 
-    # shellcheck disable=SC2310
-    validate_file "${WORKING_DIR}/statusline.sh" || return 1
+    set +e
+    validate_file "${WORKING_DIR}/statusline.sh"
+    status=$?
+    set -e
+    [[ ${status} -eq 0 ]] || return 1
     success "Local files validated"
   else
     INSTALL_MODE="remote"
@@ -318,21 +344,35 @@ acquire_files() {
     mkdir -p "${WORKING_DIR}/messages"
 
     # Download main scripts
-    # shellcheck disable=SC2310
-    download_file "${GITHUB_BASE_URL}/statusline.sh"      "${WORKING_DIR}/statusline.sh"      || return 1
-    # shellcheck disable=SC2310
-    download_file "${GITHUB_BASE_URL}/patch-statusline.sh" "${WORKING_DIR}/patch-statusline.sh" || return 1
+    set +e
+    download_file "${GITHUB_BASE_URL}/statusline.sh" "${WORKING_DIR}/statusline.sh"
+    status=$?
+    set -e
+    [[ ${status} -eq 0 ]] || return 1
+    set +e
+    download_file "${GITHUB_BASE_URL}/patch-statusline.sh" "${WORKING_DIR}/patch-statusline.sh"
+    status=$?
+    set -e
+    [[ ${status} -eq 0 ]] || return 1
     chmod +x "${WORKING_DIR}/patch-statusline.sh"
 
     # Download language message files (warn on partial failure, don't abort)
     for lang in en pt es; do
-      # shellcheck disable=SC2310
+      set +e
       download_file "${GITHUB_BASE_URL}/messages/${lang}.json" \
-        "${WORKING_DIR}/messages/${lang}.json" || warn "Failed to download messages/${lang}.json"
+        "${WORKING_DIR}/messages/${lang}.json"
+      status=$?
+      set -e
+      if [[ ${status} -ne 0 ]]; then
+        warn "Failed to download messages/${lang}.json"
+      fi
     done
 
-    # shellcheck disable=SC2310
-    validate_file "${WORKING_DIR}/statusline.sh" || return 1
+    set +e
+    validate_file "${WORKING_DIR}/statusline.sh"
+    status=$?
+    set -e
+    [[ ${status} -eq 0 ]] || return 1
     success "Files downloaded and validated"
   fi
   return 0
@@ -372,9 +412,13 @@ apply_patches() {
 prompt_language_selection() {
   local available_languages=("en" "pt" "es")
   local lang_names=("English" "Português" "Español")
+  local piped_status=0
 
-  # shellcheck disable=SC2310
-  if is_piped; then
+  set +e
+  is_piped
+  piped_status=$?
+  set -e
+  if [[ ${piped_status} -eq 0 ]]; then
     echo "en"
     return
   fi
@@ -399,8 +443,13 @@ prompt_language_selection() {
 }
 
 prompt_component_selection() {
-  # shellcheck disable=SC2310
-  if is_piped; then
+  local piped_status=0
+
+  set +e
+  is_piped
+  piped_status=$?
+  set -e
+  if [[ ${piped_status} -eq 0 ]]; then
     echo "messages cost"
     return
   fi
@@ -474,8 +523,12 @@ configure_settings() {
     info "Created new settings.json"
   fi
 
-  # shellcheck disable=SC2310
-  if ! validate_json "${SETTINGS_FILE}"; then
+  local status=0
+  set +e
+  validate_json "${SETTINGS_FILE}"
+  status=$?
+  set -e
+  if [[ ${status} -ne 0 ]]; then
     error "Existing settings.json contains invalid JSON"
     echo "  ${ARROW} Please fix ${SETTINGS_FILE} manually" >&2
     return 1
@@ -523,6 +576,7 @@ main() {
   local selected_components="messages cost"
   local total_steps=5
   local current_step=0
+  local status=0
 
   trap cleanup_on_error ERR INT TERM
 
@@ -530,13 +584,19 @@ main() {
 
   # Step 1: Check Dependencies
   step_with_progress "$((++current_step))" "${total_steps}" "Checking dependencies..."
-  # shellcheck disable=SC2310
-  check_dependencies || exit 1
+  set +e
+  check_dependencies
+  status=$?
+  set -e
+  [[ ${status} -eq 0 ]] || exit 1
 
   # Step 2: Acquire Files
   step_with_progress "$((++current_step))" "${total_steps}" "Acquiring files..."
-  # shellcheck disable=SC2310
-  acquire_files || cleanup_on_error
+  set +e
+  acquire_files
+  status=$?
+  set -e
+  [[ ${status} -eq 0 ]] || cleanup_on_error
 
   # Step 3: Select Preferences
   step_with_progress "$((++current_step))" "${total_steps}" "Configuring preferences..."
@@ -550,18 +610,27 @@ main() {
 
   # Step 4: Apply Patches
   step_with_progress "$((++current_step))" "${total_steps}" "Applying patches..."
-  # shellcheck disable=SC2310
-  apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}" || cleanup_on_error
+  set +e
+  apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}"
+  status=$?
+  set -e
+  [[ ${status} -eq 0 ]] || cleanup_on_error
   success "Patched successfully"
 
   # Step 5: Install & Configure
   step_with_progress "$((++current_step))" "${total_steps}" "Installing to ~/.claude..."
-  # shellcheck disable=SC2310
-  install_statusline "${WORKING_DIR}/statusline.sh" || cleanup_on_error
+  set +e
+  install_statusline "${WORKING_DIR}/statusline.sh"
+  status=$?
+  set -e
+  [[ ${status} -eq 0 ]] || cleanup_on_error
   success "Installed to ${TARGET_FILE}"
 
-  # shellcheck disable=SC2310
-  if ! configure_settings; then
+  set +e
+  configure_settings
+  status=$?
+  set -e
+  if [[ ${status} -ne 0 ]]; then
     warn "Installation succeeded, but automatic configuration failed"
     echo ""
     echo "Please manually add to ~/.claude/settings.json:"

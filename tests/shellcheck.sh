@@ -12,19 +12,23 @@ NC='\033[0m'
 echo "========================================"
 echo "Bash Syntax & Shellcheck Verification"
 echo "========================================"
+echo "ShellCheck: https://www.shellcheck.net/"
 echo ""
 
 FAILED=0
 
-# All scripts to check
-FILES=(
-  "${SCRIPT_DIR}/statusline.sh"
-  "${SCRIPT_DIR}/patch-statusline.sh"
-  "${SCRIPT_DIR}/install.sh"
-  "${SCRIPT_DIR}/tests/unit.sh"
-  "${SCRIPT_DIR}/tests/integration.sh"
-  "${SCRIPT_DIR}/tests/shellcheck.sh"
-)
+FILES=()
+if command -v rg >/dev/null 2>&1; then
+  file_list=$(cd "${SCRIPT_DIR}" && rg --files -g '*.sh' | sort)
+  while IFS= read -r file; do
+    FILES+=("${SCRIPT_DIR}/${file}")
+  done <<< "${file_list}"
+else
+  file_list=$(find "${SCRIPT_DIR}" -type f -name '*.sh' | sort)
+  while IFS= read -r file; do
+    FILES+=("${file}")
+  done <<< "${file_list}"
+fi
 
 # Step 1: Bash syntax validation (bash -n)
 echo "Step 1: Bash Syntax Validation (bash -n)"
