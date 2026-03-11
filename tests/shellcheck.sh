@@ -18,23 +18,7 @@ echo ""
 FAILED=0
 
 collect_files() {
-  local file
-  local files=()
-  local file_list
-
-  if command -v rg >/dev/null 2>&1; then
-    file_list=$(cd "${SCRIPT_DIR}" && rg --files -g '*.sh' | sort)
-    while IFS= read -r file; do
-      files+=("${SCRIPT_DIR}/${file}")
-    done <<< "${file_list}"
-  else
-    file_list=$(find "${SCRIPT_DIR}" -type f -name '*.sh' | sort)
-    while IFS= read -r file; do
-      files+=("${file}")
-    done <<< "${file_list}"
-  fi
-
-  printf '%s\n' "${files[@]}"
+  find "${SCRIPT_DIR}" -type f -name '*.sh' | sort
 }
 
 FILES=()
@@ -43,32 +27,30 @@ while IFS= read -r file; do
   FILES+=("${file}")
 done <<< "${file_list}"
 
-# Step 1: Bash syntax validation (bash -n)
+run_checker() {
+  local label="$1"
+  shift
+  for file in "${FILES[@]}"; do
+    local filename
+    filename=$(basename "${file}")
+    if "$@" "${file}" 2>/dev/null; then
+      echo -e "${GREEN}✓${NC} ${filename}"
+    else
+      echo -e "${RED}✗${NC} ${filename}"
+      "$@" "${file}"  # Re-run to show errors
+      FAILED=1
+    fi
+  done
+}
+
 echo "Step 1: Bash Syntax Validation (bash -n)"
 echo "----------------------------------------"
-for file in "${FILES[@]}"; do
-  filename=$(basename "${file}")
-  if bash -n "${file}" 2>/dev/null; then
-    echo -e "${GREEN}✓${NC} ${filename}"
-  else
-    echo -e "${RED}✗${NC} ${filename} (syntax error)"
-    bash -n "${file}"  # Show error without suppression
-    FAILED=1
-  fi
-done
+run_checker "bash -n" bash -n
 
 echo ""
 echo "Step 2: Shellcheck Static Analysis"
 echo "----------------------------------------"
-for file in "${FILES[@]}"; do
-  filename=$(basename "${file}")
-  if shellcheck "${file}"; then
-    echo -e "${GREEN}✓${NC} ${filename}"
-  else
-    echo -e "${RED}✗${NC} ${filename}"
-    FAILED=1
-  fi
-done
+run_checker "shellcheck" shellcheck
 
 echo ""
 echo "========================================"

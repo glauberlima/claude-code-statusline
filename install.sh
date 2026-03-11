@@ -45,6 +45,15 @@ is_wsl() {
   [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
+# Run a command capturing its exit code without triggering set -e
+try_run() {
+  local __status=0
+  set +e
+  "$@"
+  __status=$?
+  set -e
+  return ${__status}
+}
 
 cleanup_temp() {
   if [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]]; then
@@ -125,9 +134,7 @@ check_bash_version() {
   return 0
 }
 
-generate_timestamp() {
-  date +%s%N 2>/dev/null || date +%s
-}
+generate_timestamp() { date +%s; }
 
 extract_version() {
   local cmd="$1"
@@ -155,23 +162,14 @@ check_git_version() {
 
 check_dependencies() {
   local missing=()
-  local status=0
 
-  set +e
-  check_bash_version
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
+  if ! try_run check_bash_version; then
     missing+=("bash 3.2+")
   fi
   command -v claude >/dev/null 2>&1 || missing+=("claude")
   command -v curl >/dev/null 2>&1 || missing+=("curl")
   command -v node >/dev/null 2>&1 || missing+=("node")
-  set +e
-  check_git_version
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
+  if ! try_run check_git_version; then
     missing+=("git 2.11+")
   fi
 
@@ -188,11 +186,7 @@ check_dependencies() {
   success "claude ${v_claude}"
   success "node ${v_node}"
   success "git ${v_git}"
-  set +e
-  is_wsl
-  status=$?
-  set -e
-  if [[ ${status} -eq 0 ]]; then
+  if try_run is_wsl; then
     muted "  Detected: WSL environment"
   fi
 
@@ -223,12 +217,7 @@ show_install_instructions() {
       echo "  brew install curl git node"
       ;;
     Linux)
-      local wsl_status=0
-      set +e
-      is_wsl
-      wsl_status=$?
-      set -e
-      if [[ ${wsl_status} -eq 0 ]]; then
+      if try_run is_wsl; then
         echo -e "${CYAN}Install on WSL:${NC}"
       else
         echo -e "${CYAN}Install on Linux:${NC}"
@@ -309,8 +298,6 @@ validate_file() {
 # Local mode: all files already present in current directory.
 # Remote mode: downloads statusline.sh, patch-statusline.sh, messages/*.json to TEMP_DIR.
 acquire_files() {
-  local status=0
-
   if [[ -f "./statusline.sh" && -f "./patch-statusline.sh" && -d "./messages" ]]; then
     INSTALL_MODE="local"
     WORKING_DIR="$(pwd)"
@@ -325,11 +312,7 @@ acquire_files() {
       *) ;;
     esac
 
-    set +e
-    validate_file "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
+    try_run validate_file "${WORKING_DIR}/statusline.sh" || return 1
     success "Local files validated"
   else
     INSTALL_MODE="remote"
@@ -343,35 +326,19 @@ acquire_files() {
     mkdir -p "${WORKING_DIR}/messages"
 
     # Download main scripts
-    set +e
-    download_file "${GITHUB_BASE_URL}/statusline.sh" "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
-    set +e
-    download_file "${GITHUB_BASE_URL}/patch-statusline.sh" "${WORKING_DIR}/patch-statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
+    try_run download_file "${GITHUB_BASE_URL}/statusline.sh" "${WORKING_DIR}/statusline.sh" || return 1
+    try_run download_file "${GITHUB_BASE_URL}/patch-statusline.sh" "${WORKING_DIR}/patch-statusline.sh" || return 1
     chmod +x "${WORKING_DIR}/patch-statusline.sh"
 
     # Download language message files (warn on partial failure, don't abort)
     for lang in en pt es; do
-      set +e
-      download_file "${GITHUB_BASE_URL}/messages/${lang}.json" \
-        "${WORKING_DIR}/messages/${lang}.json"
-      status=$?
-      set -e
-      if [[ ${status} -ne 0 ]]; then
+      if ! try_run download_file "${GITHUB_BASE_URL}/messages/${lang}.json" \
+        "${WORKING_DIR}/messages/${lang}.json"; then
         warn "Failed to download messages/${lang}.json"
       fi
     done
 
-    set +e
-    validate_file "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
+    try_run validate_file "${WORKING_DIR}/statusline.sh" || return 1
     success "Files downloaded and validated"
   fi
   return 0
@@ -411,13 +378,8 @@ apply_patches() {
 prompt_language_selection() {
   local available_languages=("en" "pt" "es")
   local lang_names=("English" "Português" "Español")
-  local piped_status=0
 
-  set +e
-  is_piped
-  piped_status=$?
-  set -e
-  if [[ ${piped_status} -eq 0 ]]; then
+  if try_run is_piped; then
     echo "en"
     return
   fi
@@ -442,13 +404,7 @@ prompt_language_selection() {
 }
 
 prompt_component_selection() {
-  local piped_status=0
-
-  set +e
-  is_piped
-  piped_status=$?
-  set -e
-  if [[ ${piped_status} -eq 0 ]]; then
+  if try_run is_piped; then
     echo "messages cost"
     return
   fi
@@ -522,12 +478,7 @@ configure_settings() {
     info "Created new settings.json"
   fi
 
-  local status=0
-  set +e
-  validate_json "${SETTINGS_FILE}"
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
+  if ! try_run validate_json "${SETTINGS_FILE}"; then
     error "Existing settings.json contains invalid JSON"
     echo "  ${ARROW} Please fix ${SETTINGS_FILE} manually" >&2
     return 1
@@ -575,7 +526,6 @@ main() {
   local selected_components="messages cost"
   local total_steps=5
   local current_step=0
-  local status=0
 
   trap cleanup_on_error ERR INT TERM
 
@@ -583,19 +533,11 @@ main() {
 
   # Step 1: Check Dependencies
   step_with_progress "$((++current_step))" "${total_steps}" "Checking dependencies..."
-  set +e
-  check_dependencies
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || exit 1
+  try_run check_dependencies || exit 1
 
   # Step 2: Acquire Files
   step_with_progress "$((++current_step))" "${total_steps}" "Acquiring files..."
-  set +e
-  acquire_files
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
+  try_run acquire_files || cleanup_on_error
 
   # Step 3: Select Preferences
   step_with_progress "$((++current_step))" "${total_steps}" "Configuring preferences..."
@@ -609,27 +551,15 @@ main() {
 
   # Step 4: Apply Patches
   step_with_progress "$((++current_step))" "${total_steps}" "Applying patches..."
-  set +e
-  apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}"
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
+  try_run apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}" || cleanup_on_error
   success "Patched successfully"
 
   # Step 5: Install & Configure
   step_with_progress "$((++current_step))" "${total_steps}" "Installing to ~/.claude..."
-  set +e
-  install_statusline "${WORKING_DIR}/statusline.sh"
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
+  try_run install_statusline "${WORKING_DIR}/statusline.sh" || cleanup_on_error
   success "Installed to ${TARGET_FILE}"
 
-  set +e
-  configure_settings
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
+  if ! try_run configure_settings; then
     warn "Installation succeeded, but automatic configuration failed"
     echo ""
     echo "Please manually add to ~/.claude/settings.json:"

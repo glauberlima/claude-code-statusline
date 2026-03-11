@@ -19,16 +19,10 @@ source_statusline_functions
 
 passed=0
 failed=0
-bar_width=$(eval 'printf "%s" "${BAR_WIDTH}"')
-show_messages=$(eval 'printf "%s" "${SHOW_MESSAGES}"')
-show_cost=$(eval 'printf "%s" "${SHOW_COST}"')
-red=$(eval 'printf "%s" "${RED}"')
-green=$(eval 'printf "%s" "${GREEN}"')
-nc=$(eval 'printf "%s" "${NC}"')
-cyan=$(eval 'printf "%s" "${CYAN}"')
-blue=$(eval 'printf "%s" "${BLUE}"')
-magenta=$(eval 'printf "%s" "${MAGENTA}"')
-orange=$(eval 'printf "%s" "${ORANGE}"')
+for var in bar_width:BAR_WIDTH show_messages:SHOW_MESSAGES show_cost:SHOW_COST \
+           red:RED green:GREEN nc:NC cyan:CYAN blue:BLUE magenta:MAGENTA orange:ORANGE; do
+  eval "${var%%:*}=\${${var##*:}}"
+done
 
 test() {
   local name="$1"
@@ -139,6 +133,9 @@ test "tier boundary 80% (tier 3)" "3" "${tier_80}"
 tier_81=$(get_context_tier 81)
 test "tier boundary 81% (tier 4)" "4" "${tier_81}"
 
+tier_100=$(get_context_tier 100)
+test "tier boundary 100% (tier 4)" "4" "${tier_100}"
+
 # Test edge cases
 echo ""
 echo "Testing edge cases..."
@@ -150,30 +147,6 @@ test "get_context_message 0%" "non-empty" "${result}"
 msg=$(get_context_message 100)
 result=$([[ -n "${msg}" ]] && echo "non-empty")
 test "get_context_message 100%" "non-empty" "${result}"
-
-# Test get_context_tier()
-echo ""
-echo "Testing get_context_tier()..."
-result=$(get_context_tier 10)
-test "get_context_tier 10%" "0" "${result}"
-result=$(get_context_tier 20)
-test "get_context_tier 20%" "0" "${result}"
-result=$(get_context_tier 21)
-test "get_context_tier 21%" "1" "${result}"
-result=$(get_context_tier 40)
-test "get_context_tier 40%" "1" "${result}"
-result=$(get_context_tier 41)
-test "get_context_tier 41%" "2" "${result}"
-result=$(get_context_tier 60)
-test "get_context_tier 60%" "2" "${result}"
-result=$(get_context_tier 61)
-test "get_context_tier 61%" "3" "${result}"
-result=$(get_context_tier 80)
-test "get_context_tier 80%" "3" "${result}"
-result=$(get_context_tier 81)
-test "get_context_tier 81%" "4" "${result}"
-result=$(get_context_tier 100)
-test "get_context_tier 100%" "4" "${result}"
 
 # Test validate_directory() - security function
 echo ""

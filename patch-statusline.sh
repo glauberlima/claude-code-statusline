@@ -50,6 +50,11 @@ require_node() {
   }
 }
 
+validate_json() {
+  node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
+       "$1" 2>/dev/null
+}
+
 # Shared helper: replace the block between start_marker and end_marker in file
 # with new_content (pre-built string), then atomically overwrite file.
 _replace_marker_block() {
@@ -169,12 +174,11 @@ main() {
   require_node
 
   # Validate markers exist
-  if ! grep -q '@CONFIG_START' "${statusline_file}"; then
-    fail "@CONFIG_START marker not found in ${statusline_file}"
-  fi
-  if ! grep -q '@MESSAGES_START' "${statusline_file}"; then
-    fail "@MESSAGES_START marker not found in ${statusline_file}"
-  fi
+  for marker in '@CONFIG_START' '@MESSAGES_START'; do
+    if ! grep -q "${marker}" "${statusline_file}"; then
+      fail "${marker} marker not found in ${statusline_file}"
+    fi
+  done
 
   # Perform patching
   echo "Patching ${statusline_file}..."
@@ -186,8 +190,7 @@ main() {
   # 2. Replace MESSAGES block (if language JSON provided)
   if [[ -n "${language_json}" ]]; then
     # Validate JSON syntax
-    if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
-         "${language_json}" 2>/dev/null; then
+    if ! validate_json "${language_json}"; then
       fail "Invalid JSON in ${language_json}"
     fi
 
