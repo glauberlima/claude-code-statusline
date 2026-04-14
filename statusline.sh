@@ -314,7 +314,7 @@ build_progress_bar() {
   local time_phase=$(( ${_wave_time:-0} % NUM_WAVE_COLORS ))
   for ((i=0; i<filled; i++)); do
     color_idx=$(( (i + time_phase) % NUM_WAVE_COLORS ))
-    filled_bar+="\033[38;5;${WAVE_COLORS[$color_idx]}m${BAR_FILLED}"
+    filled_bar+="\033[38;5;${WAVE_COLORS[${color_idx}]}m${BAR_FILLED}"
   done
 
   # Build empty portion (stays gray)
@@ -410,7 +410,9 @@ get_git_info() {
   local git_opts=()
 
   # Validate and set git directory option
-  if is_present "${current_dir}"; then
+  local is_dir_present=false
+  is_present "${current_dir}" && is_dir_present=true
+  if [[ "${is_dir_present}" == "true" ]]; then
     # Invoke validation separately to avoid masking return value
     local validation_result=0
     validate_directory "${current_dir}"
@@ -527,7 +529,9 @@ build_directory_component() {
   local current_dir="$1"
   local dir_name
 
-  if is_present "${current_dir}" && validate_directory "${current_dir}"; then
+  local valid_dir=false
+  is_present "${current_dir}" && validate_directory "${current_dir}" && valid_dir=true
+  if [[ "${valid_dir}" == "true" ]]; then
     dir_name=$(get_dirname "${current_dir}")
   else
     dir_name=$(get_dirname "${PWD}")
@@ -569,7 +573,9 @@ build_files_component() {
   local file_count="$1"
 
   # Only show if there are modified files
-  if is_present "${file_count}" && [[ "${file_count}" != "0" ]]; then
+  local has_files=false
+  is_present "${file_count}" && [[ "${file_count}" != "0" ]] && has_files=true
+  if [[ "${has_files}" == "true" ]]; then
     echo "${CHANGE_ICON} ${ORANGE}changes${NC}"
   fi
 }
@@ -581,7 +587,9 @@ build_cost_component() {
   [[ "${SHOW_COST}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
-  if is_present "${cost_usd}" && [[ "${cost_usd}" != "0" ]]; then
+  local has_cost=false
+  is_present "${cost_usd}" && [[ "${cost_usd}" != "0" ]] && has_cost=true
+  if [[ "${has_cost}" == "true" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
       # Use LC_NUMERIC=C to ensure decimal point (not comma) for printf on Windows
@@ -689,7 +697,7 @@ EOF
 
   # Strip carriage returns (Windows line endings compatibility)
   for _v in model_name current_dir context_size current_usage context_percent cost_usd; do
-    declare "$_v=${!_v%$'\r'}"
+    declare "${_v}=${!_v%$'\r'}"
   done
 
   # Capture epoch time for wave animation (EPOCHSECONDS is free on bash 5+)
