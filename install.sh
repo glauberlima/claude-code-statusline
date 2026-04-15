@@ -394,8 +394,9 @@ apply_patches() {
   chmod +x "${patch_script}"
 
   local patch_args=("${statusline_file}" "${working_dir}/messages/${language}.json")
-  [[ "${components}" != *"messages"* ]] && patch_args+=("--no-messages")
-  [[ "${components}" != *"cost"* ]]     && patch_args+=("--no-cost")
+  [[ "${components}" != *"messages"* ]]      && patch_args+=("--no-messages")
+  [[ "${components}" != *"cost"* ]]          && patch_args+=("--no-cost")
+  [[ "${components}" != *"rainbow-wave"* ]]  && patch_args+=("--no-rainbow-wave")
 
   "${patch_script}" "${patch_args[@]}" || {
     error "Patching failed"
@@ -449,28 +450,34 @@ prompt_component_selection() {
   piped_status=$?
   set -e
   if [[ ${piped_status} -eq 0 ]]; then
-    echo "messages cost"
+    echo "messages cost rainbow-wave"
     return
   fi
 
   echo "" >&2
   echo -e "${CYAN}Select features:${NC}" >&2
   echo "" >&2
-  echo "  1) All features (messages + cost)" >&2
-  echo "  2) Messages only" >&2
-  echo "  3) Cost only" >&2
-  echo "  4) Minimal (no messages, no cost)" >&2
+  echo "  1) All features (messages + cost + rainbow-wave)" >&2
+  echo "  2) Messages + Cost" >&2
+  echo "  3) Messages + Rainbow Wave" >&2
+  echo "  4) Messages only" >&2
+  echo "  5) Cost only" >&2
+  echo "  6) Rainbow Wave only" >&2
+  echo "  7) Minimal (no messages, no cost, no rainbow-wave)" >&2
   echo "" >&2
   printf "Enter selection [1]: " >&2
   read -r selection < /dev/tty || selection=""
   selection="${selection:-1}"
 
   case "${selection}" in
-    1) echo "messages cost" ;;
-    2) echo "messages" ;;
-    3) echo "cost" ;;
-    4) echo "" ;;
-    *) echo "messages cost" ;;
+    1) echo "messages cost rainbow-wave" ;;
+    2) echo "messages cost" ;;
+    3) echo "messages rainbow-wave" ;;
+    4) echo "messages" ;;
+    5) echo "cost" ;;
+    6) echo "rainbow-wave" ;;
+    7) echo "" ;;
+    *) echo "messages cost rainbow-wave" ;;
   esac
 }
 
@@ -572,7 +579,7 @@ NODEEOF
 
 main() {
   local selected_language="en"
-  local selected_components="messages cost"
+  local selected_components="messages cost rainbow-wave"
   local total_steps=5
   local current_step=0
   local status=0

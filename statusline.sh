@@ -45,6 +45,7 @@ readonly NUM_WAVE_COLORS=12
 # @CONFIG_START
 readonly SHOW_MESSAGES=true
 readonly SHOW_COST=true
+readonly SHOW_RAINBOW_WAVE=true
 # @CONFIG_END
 
 # ============================================================
@@ -309,13 +310,33 @@ build_progress_bar() {
   local filled=$((percent * BAR_WIDTH / 100))
   local empty=$((BAR_WIDTH - filled))
 
-  # Build filled portion with rainbow wave animation
-  local filled_bar="" i color_idx
-  local time_phase=$(( ${_wave_time:-0} % NUM_WAVE_COLORS ))
-  for ((i=0; i<filled; i++)); do
-    color_idx=$(( (i + time_phase) % NUM_WAVE_COLORS ))
-    filled_bar+="\033[38;5;${WAVE_COLORS[${color_idx}]}m${BAR_FILLED}"
-  done
+  local filled_bar="" i
+
+  if [[ "${SHOW_RAINBOW_WAVE}" == "true" ]]; then
+    # Build filled portion with rainbow wave animation
+    local color_idx
+    local time_phase=$(( ${_wave_time:-0} % NUM_WAVE_COLORS ))
+    for ((i=0; i<filled; i++)); do
+      color_idx=$(( (i + time_phase) % NUM_WAVE_COLORS ))
+      filled_bar+="\033[38;5;${WAVE_COLORS[${color_idx}]}m${BAR_FILLED}"
+    done
+  else
+    # Build filled portion with tier-based color
+    local tier bar_color
+    tier=$(get_context_tier "${percent}")
+    case "${tier}" in
+      0) bar_color="${GREEN}" ;;
+      1) bar_color="${CYAN}" ;;
+      2) bar_color="${ORANGE}" ;;
+      3) bar_color="${ORANGE}" ;;
+      4) bar_color="${RED}" ;;
+      *) bar_color="${GRAY}" ;;
+    esac
+    for ((i=0; i<filled; i++)); do
+      filled_bar+="${BAR_FILLED}"
+    done
+    filled_bar="${bar_color}${filled_bar}"
+  fi
 
   # Build empty portion (stays gray)
   local empty_bar=""
@@ -706,10 +727,12 @@ EOF
   done
 
   # Capture epoch time for wave animation (EPOCHSECONDS is free on bash 5+)
-  if [[ -n "${EPOCHSECONDS:-}" ]]; then
-    _wave_time="${EPOCHSECONDS}"
-  else
-    _wave_time=$(date +%s)
+  if [[ "${SHOW_RAINBOW_WAVE}" == "true" ]]; then
+    if [[ -n "${EPOCHSECONDS:-}" ]]; then
+      _wave_time="${EPOCHSECONDS}"
+    else
+      _wave_time=$(date +%s)
+    fi
   fi
 
   # Build components (read toggle flags from global constants)

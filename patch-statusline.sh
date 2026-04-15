@@ -23,18 +23,20 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures
 # ============================================================
 
 show_usage() {
-  echo "Usage: $0 <statusline-file> [language-json] [--no-messages] [--no-cost]"
+  echo "Usage: $0 <statusline-file> [language-json] [--no-messages] [--no-cost] [--no-rainbow-wave]"
   echo ""
   echo "Arguments:"
-  echo "  statusline-file   Path to statusline.sh file (required)"
-  echo "  language-json     Path to JSON messages file (optional)"
-  echo "  --no-messages     Disable context messages"
-  echo "  --no-cost         Disable cost tracking"
+  echo "  statusline-file     Path to statusline.sh file (required)"
+  echo "  language-json       Path to JSON messages file (optional)"
+  echo "  --no-messages       Disable context messages"
+  echo "  --no-cost           Disable cost tracking"
+  echo "  --no-rainbow-wave   Disable rainbow wave progress bar"
   echo ""
   echo "Examples:"
   echo "  $0 statusline.sh messages/pt.json"
   echo "  $0 statusline.sh --no-messages"
   echo "  $0 statusline.sh messages/es.json --no-cost"
+  echo "  $0 statusline.sh --no-rainbow-wave"
 }
 
 fail() {
@@ -68,9 +70,11 @@ replace_config_block() {
   local file="$1"
   local show_messages="$2"
   local show_cost="$3"
+  local show_rainbow_wave="$4"
   local content
   content="readonly SHOW_MESSAGES=${show_messages}
-readonly SHOW_COST=${show_cost}"
+readonly SHOW_COST=${show_cost}
+readonly SHOW_RAINBOW_WAVE=${show_rainbow_wave}"
   _replace_marker_block "${file}" '@CONFIG_START' '@CONFIG_END' "${content}"
 }
 
@@ -129,6 +133,7 @@ main() {
   local language_json=""
   local show_messages=true
   local show_cost=true
+  local show_rainbow_wave=true
 
   # Parse remaining args
   shift
@@ -139,6 +144,9 @@ main() {
         ;;
       --no-cost)
         show_cost=false
+        ;;
+      --no-rainbow-wave)
+        show_rainbow_wave=false
         ;;
       *.json)
         language_json="${arg}"
@@ -180,8 +188,8 @@ main() {
   echo "Patching ${statusline_file}..."
 
   # 1. Replace CONFIG block
-  replace_config_block "${statusline_file}" "${show_messages}" "${show_cost}"
-  echo "  ✓ Updated configuration (SHOW_MESSAGES=${show_messages}, SHOW_COST=${show_cost})"
+  replace_config_block "${statusline_file}" "${show_messages}" "${show_cost}" "${show_rainbow_wave}"
+  echo "  ✓ Updated configuration (SHOW_MESSAGES=${show_messages}, SHOW_COST=${show_cost}, SHOW_RAINBOW_WAVE=${show_rainbow_wave})"
 
   # 2. Replace MESSAGES block (if language JSON provided)
   if [[ -n "${language_json}" ]]; then
