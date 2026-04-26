@@ -415,6 +415,7 @@ get_git_info() {
   local git_opts=()
 
   # Validate and set git directory option
+  # shellcheck disable=SC2310  # is_present is a pure boolean check; set -e propagation is irrelevant here
   if is_present "${current_dir}"; then
     # Invoke validation separately to avoid masking return value
     local validation_result=0
@@ -532,6 +533,7 @@ build_directory_component() {
   local current_dir="$1"
   local dir_name
 
+  # shellcheck disable=SC2310  # is_present/validate_directory are pure boolean checks
   if is_present "${current_dir}" && validate_directory "${current_dir}"; then
     dir_name=$(get_dirname "${current_dir}")
   else
@@ -574,6 +576,7 @@ build_files_component() {
   local file_count="$1"
 
   # Only show if there are modified files
+  # shellcheck disable=SC2310  # is_present is a pure boolean check
   if is_present "${file_count}" && [[ "${file_count}" != "0" ]]; then
     echo "${CHANGE_ICON} ${ORANGE}changes${NC}"
   fi
@@ -586,6 +589,7 @@ build_cost_component() {
   [[ "${SHOW_COST}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
+  # shellcheck disable=SC2310  # is_present is a pure boolean check
   if is_present "${cost_usd}" && [[ "${cost_usd}" != "0" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
@@ -694,7 +698,7 @@ EOF
 
   # Strip carriage returns (Windows line endings compatibility)
   for _v in model_name current_dir context_size current_usage context_percent cost_usd; do
-    declare "$_v=${!_v%$'\r'}"
+    declare "${_v}=${!_v%$'\r'}"
   done
 
   # Build components (read toggle flags from global constants)
