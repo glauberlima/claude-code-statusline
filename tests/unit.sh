@@ -6,16 +6,15 @@ set -euo pipefail
 # Source the statusline functions by extracting everything except the main call
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-source_statusline_functions() {
-  local temp_file
-  temp_file=$(mktemp)
-  sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${temp_file}"
-  # shellcheck source=/dev/null  # Dynamic temp file - runtime-generated content
-  source "${temp_file}"
-  rm -f "${temp_file}"
-}
-
-source_statusline_functions
+# Source at top level (not inside a function) so readonly arrays are visible
+# globally on all platforms — macOS bash does not propagate readonly arrays
+# declared via source() called from within a function to the global scope.
+_sl_tmp=$(mktemp)
+sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${_sl_tmp}"
+# shellcheck source=/dev/null
+source "${_sl_tmp}"
+rm -f "${_sl_tmp}"
+unset _sl_tmp
 
 passed=0
 failed=0
