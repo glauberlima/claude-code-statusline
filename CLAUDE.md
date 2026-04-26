@@ -492,7 +492,7 @@ Strategy: High precision when available, uniqueness when not.
 
 ```
 /
-├── statusline.sh          # Main implementation (~720 lines, includes hardcoded English)
+├── statusline.sh          # Main implementation (includes hardcoded English)
 ├── patch-statusline.sh    # Build-time patching tool
 ├── install.sh             # Unix installer script
 ├── README.md              # User-facing documentation
