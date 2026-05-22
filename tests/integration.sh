@@ -78,6 +78,43 @@ run_test() {
   return 0  # Always return 0 to prevent set -e from exiting script early
 }
 
+# Assert a substring is NOT present in the output
+run_test_absent() {
+  local test_name="$1"
+  local json_input="$2"
+  local absent_substring="$3"
+
+  TOTAL=$((TOTAL + 1))
+
+  local run_output exit_code output clean_output
+  run_output=$(run_statusline "${json_input}")
+  {
+    IFS= read -r exit_code
+    output=$(cat)
+  } <<< "${run_output}"
+  clean_output=$(printf '%s' "${output}" | strip_ansi)
+
+  if [[ ${exit_code} -ne 0 ]]; then
+    echo -e "${RED}✗${NC} ${test_name}"
+    echo "  Exit code: ${exit_code}"
+    echo "  Output: ${output}"
+    FAILED=$((FAILED + 1))
+    return 0
+  fi
+
+  if echo "${clean_output}" | grep -q "${absent_substring}"; then
+    echo -e "${RED}✗${NC} ${test_name} (unexpected content found)"
+    echo "  Unexpected substring: ${absent_substring}"
+    echo "  Actual output: ${clean_output}"
+    FAILED=$((FAILED + 1))
+  else
+    echo -e "${GREEN}✓${NC} ${test_name}"
+    PASSED=$((PASSED + 1))
+  fi
+
+  return 0
+}
+
 run_fixture_test() {
   local test_name="$1"
   local fixture_path="$2"
@@ -417,6 +454,46 @@ main() {
     },
     "cost": {"total_cost_usd": 9.99}
   }'
+
+  # Brain indicator tests
+  echo -e "\n${YELLOW}=== Brain Indicator Tests ===${NC}"
+
+  run_test "Brain: shown when effort=max and thinking=true" '{
+    "model": {"display_name": "Opus"},
+    "workspace": {"current_dir": "/test/project"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 50000},
+      "used_percentage": 25
+    },
+    "cost": {"total_cost_usd": 0},
+    "effort": {"level": "max"},
+    "thinking": {"enabled": true}
+  }' "🧠"
+
+  run_test_absent "Brain: absent when effort=high (not max)" '{
+    "model": {"display_name": "Opus"},
+    "workspace": {"current_dir": "/test/project"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 50000},
+      "used_percentage": 25
+    },
+    "cost": {"total_cost_usd": 0},
+    "effort": {"level": "high"},
+    "thinking": {"enabled": true}
+  }' "🧠"
+
+  run_test_absent "Brain: absent when effort/thinking fields missing" '{
+    "model": {"display_name": "Opus"},
+    "workspace": {"current_dir": "/test/project"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 50000},
+      "used_percentage": 25
+    },
+    "cost": {"total_cost_usd": 0}
+  }' "🧠"
 
   # Summary
   echo -e "\n${YELLOW}=== Test Summary ===${NC}"
