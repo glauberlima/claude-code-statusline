@@ -696,7 +696,7 @@ main() {
     exit 1
   fi
 
-  # Validate field count (expected: 6 lines)
+  # Validate field count (expected: 7 lines)
   local line_count
   line_count=$(printf '%s\n' "${parsed}" | wc -l)
   if [[ ${line_count} -ne 7 ]]; then
@@ -713,7 +713,7 @@ main() {
     read -r current_usage
     read -r context_percent
     read -r cost_usd
-    # shellcheck disable=SC2034  # thinking_active will be consumed by build_context_component
+    # shellcheck disable=SC2034  # unused until Task 4 wires it into build_context_component
     read -r thinking_active
   } << EOF
 ${parsed}
