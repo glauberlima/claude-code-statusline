@@ -54,11 +54,16 @@ require_node() {
 # with new_content (pre-built string), then atomically overwrite file.
 _replace_marker_block() {
   local file="$1" start_marker="$2" end_marker="$3" new_content="$4"
-  local tmp
+  local tmp tmp_content
   tmp=$(mktemp)
-  sed -n "1,/${start_marker}/p" "${file}" > "${tmp}" || return 1
-  printf '%s\n' "${new_content}" >> "${tmp}" || return 1
-  sed -n "/${end_marker}/,\$p" "${file}" >> "${tmp}" || return 1
+  tmp_content=$(mktemp)
+  printf '%s\n' "${new_content}" > "${tmp_content}"
+  awk -v sm="${start_marker}" -v em="${end_marker}" -v cf="${tmp_content}" '
+    !done && $0 ~ sm { print; while ((getline line < cf) > 0) print line; close(cf); skip=1; next }
+    skip && $0 ~ em  { skip=0; done=1 }
+    !skip            { print }
+  ' "${file}" > "${tmp}"
+  rm -f "${tmp_content}"
   chmod +x "${tmp}"
   mv "${tmp}" "${file}"
 }
