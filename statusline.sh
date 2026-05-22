@@ -521,6 +521,7 @@ build_context_component() {
   local context_size="$1"
   local current_usage="$2"
   local context_percent="$3"
+  local thinking_active="${4:-0}"
 
   context_percent=$(clamp_percent "${context_percent}")
 
@@ -534,6 +535,9 @@ build_context_component() {
   local size_formatted
   size_formatted=$(format_number "${context_size}")
 
+  local brain_part=""
+  [[ "${thinking_active}" == "1" ]] && brain_part=" 🧠"
+
   # Build message part conditionally (read from global SHOW_MESSAGES)
   local message_part=""
   if [[ "${SHOW_MESSAGES}" == "true" ]]; then
@@ -546,8 +550,8 @@ build_context_component() {
     message_part=" ${GRAY}|${NC} ${msg_color}${message}${NC}"
   fi
 
-  # Output with brackets, colored bar, formatted numbers, and optional message
-  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted}${message_part}"
+  # Output with brackets, colored bar, formatted numbers, brain indicator, and optional message
+  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted}${brain_part}${message_part}"
 }
 
 build_directory_component() {
@@ -713,7 +717,6 @@ main() {
     read -r current_usage
     read -r context_percent
     read -r cost_usd
-    # shellcheck disable=SC2034  # unused until Task 4 wires it into build_context_component
     read -r thinking_active
   } << EOF
 ${parsed}
@@ -727,7 +730,7 @@ EOF
   # Build components (read toggle flags from global constants)
   local model_part context_part dir_part git_part cost_part files_part
   model_part=$(build_model_component "${model_name}")
-  context_part=$(build_context_component "${context_size}" "${current_usage}" "${context_percent}")
+  context_part=$(build_context_component "${context_size}" "${current_usage}" "${context_percent}" "${thinking_active}")
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"
