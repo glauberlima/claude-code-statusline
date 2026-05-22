@@ -26,7 +26,7 @@ run_statusline() {
   local exit_code=0
   local output
 
-  output=$(printf '%s' "${json_input}" | "${SCRIPT_DIR}/statusline.sh" 2>&1) || exit_code=$?
+  output=$("${SCRIPT_DIR}/statusline.sh" <<< "${json_input}" 2>&1) || exit_code=$?
 
   printf '%s\n' "${exit_code}"
   printf '%s' "${output}"
@@ -121,7 +121,7 @@ run_fixture_test() {
   local expected_substring="${3:-}"
   local fixture_content
 
-  fixture_content=$(cat "${fixture_path}")
+  fixture_content=$(<"${fixture_path}")
   run_test "${test_name}" "${fixture_content}" "${expected_substring}"
 }
 
