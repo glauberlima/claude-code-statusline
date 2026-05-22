@@ -500,8 +500,12 @@ bar_50=$(build_progress_bar 50)
 bar_stripped=$(echo -e "${bar_50}" | strip_ansi)
 
 # Count total chars by summing filled + empty (wc -m is unreliable for multibyte UTF-8 on Windows)
-filled_50=$(echo "${bar_stripped}" | grep -o "█" | wc -l | tr -d ' \t') || filled_50=0
-empty_50=$(echo "${bar_stripped}" | grep -o "░" | wc -l | tr -d ' \t') || empty_50=0
+_bar_without_filled="${bar_stripped//█/}"
+_bar_without_empty="${bar_stripped//░/}"
+# shellcheck disable=SC2154
+filled_50=$(( (${#bar_stripped} - ${#_bar_without_filled}) / ${#BAR_FILLED} ))
+# shellcheck disable=SC2154
+empty_50=$(( (${#bar_stripped} - ${#_bar_without_empty}) / ${#BAR_EMPTY} ))
 char_count=$(( filled_50 + empty_50 ))
 test "progress bar character count (50%)" "${bar_width}" "${char_count}"
 
@@ -534,12 +538,16 @@ fi
 # Test edge cases
 bar_0=$(build_progress_bar 0)
 bar_0_stripped=$(echo -e "${bar_0}" | strip_ansi)
-empty_0_count=$(( $(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l) ))
+_bar0_without_empty="${bar_0_stripped//░/}"
+# shellcheck disable=SC2154
+empty_0_count=$(( (${#bar_0_stripped} - ${#_bar0_without_empty}) / ${#BAR_EMPTY} ))
 test "0% progress bar (all empty)" "${bar_width}" "${empty_0_count}"
 
 bar_100=$(build_progress_bar 100)
 bar_100_stripped=$(echo -e "${bar_100}" | strip_ansi)
-filled_100_count=$(( $(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l) ))
+_bar100_without_filled="${bar_100_stripped//█/}"
+# shellcheck disable=SC2154
+filled_100_count=$(( (${#bar_100_stripped} - ${#_bar100_without_filled}) / ${#BAR_FILLED} ))
 test "100% progress bar (all filled)" "${bar_width}" "${filled_100_count}"
 
 # --- Progress bar regression: bar math ---
@@ -549,10 +557,10 @@ echo "Testing build_progress_bar() bar math (exact char counts)..."
 count_bar_chars() {
   local bar_output="$1"
   local char="$2"
-  local stripped count
+  local stripped without count
   stripped=$(echo "${bar_output}" | strip_ansi)
-  # || count=0: grep exits 1 when no match found; safe under set -e because it's left of ||
-  count=$(echo "${stripped}" | grep -o "${char}" | wc -l | tr -d ' \t') || count=0
+  without="${stripped//"${char}"/}"
+  count=$(( (${#stripped} - ${#without}) / ${#char} ))
   echo "${count}"
 }
 
