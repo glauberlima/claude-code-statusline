@@ -6,16 +6,15 @@ set -euo pipefail
 # Source the statusline functions by extracting everything except the main call
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-source_statusline_functions() {
-  local temp_file
-  temp_file=$(mktemp)
-  sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${temp_file}"
-  # shellcheck source=/dev/null  # Dynamic temp file - runtime-generated content
-  source "${temp_file}"
-  rm -f "${temp_file}"
-}
-
-source_statusline_functions
+# Source at top level (not inside a function) so readonly arrays are visible
+# globally on all platforms — macOS bash does not propagate readonly arrays
+# declared via source() called from within a function to the global scope.
+_sl_tmp=$(mktemp)
+sed '$d' "${SCRIPT_DIR}/statusline.sh" > "${_sl_tmp}"
+# shellcheck source=/dev/null
+source "${_sl_tmp}"
+rm -f "${_sl_tmp}"
+unset _sl_tmp
 
 passed=0
 failed=0
@@ -395,8 +394,10 @@ bar_50=$(build_progress_bar 50)
 # Strip ANSI codes for verification
 bar_stripped=$(echo -e "${bar_50}" | strip_ansi)
 
-# Count UTF-8 characters (should be BAR_WIDTH total)
-char_count=$(( $(echo -n "${bar_stripped}" | wc -m) ))
+# Count total chars by summing filled + empty (wc -m is unreliable for multibyte UTF-8 on Windows)
+filled_50=$(echo "${bar_stripped}" | grep -o "█" | wc -l | tr -d ' \t') || filled_50=0
+empty_50=$(echo "${bar_stripped}" | grep -o "░" | wc -l | tr -d ' \t') || empty_50=0
+char_count=$(( filled_50 + empty_50 ))
 test "progress bar character count (50%)" "${bar_width}" "${char_count}"
 
 # Verify no broken encoding (no question marks or replacement chars)
@@ -435,6 +436,65 @@ bar_100=$(build_progress_bar 100)
 bar_100_stripped=$(echo -e "${bar_100}" | strip_ansi)
 filled_100_count=$(( $(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l) ))
 test "100% progress bar (all filled)" "${bar_width}" "${filled_100_count}"
+
+# --- Progress bar regression: bar math ---
+echo ""
+echo "Testing build_progress_bar() bar math (exact char counts)..."
+
+count_bar_chars() {
+  local bar_output="$1"
+  local char="$2"
+  local stripped count
+  stripped=$(echo "${bar_output}" | strip_ansi)
+  # || count=0: grep exits 1 when no match found; safe under set -e because it's left of ||
+  count=$(echo "${stripped}" | grep -o "${char}" | wc -l | tr -d ' \t') || count=0
+  echo "${count}"
+}
+
+while IFS=' ' read -r pct expect_filled expect_empty; do
+  bar=$(build_progress_bar "${pct}")
+  got_filled=$(count_bar_chars "${bar}" "█")
+  got_empty=$(count_bar_chars "${bar}" "░")
+  test "build_progress_bar ${pct}%: filled=█×${expect_filled}" "${expect_filled}" "${got_filled}"
+  test "build_progress_bar ${pct}%: empty=░×${expect_empty}" "${expect_empty}" "${got_empty}"
+done << 'BARMATH'
+0 0 15
+20 3 12
+50 7 8
+80 12 3
+100 15 0
+BARMATH
+
+# --- Progress bar regression: boundary/clamp ---
+echo ""
+echo "Testing build_progress_bar() boundary/clamp behavior..."
+
+bar_101=$(build_progress_bar 101)
+filled_101=$(count_bar_chars "${bar_101}" "█")
+test "build_progress_bar 101% clamped to 100 (15 filled)" "15" "${filled_101}"
+
+bar_neg=$(build_progress_bar -1)
+filled_neg=$(count_bar_chars "${bar_neg}" "█")
+test "build_progress_bar -1% clamped to 0 (0 filled)" "0" "${filled_neg}"
+
+# --- Progress bar regression: color tiers ---
+echo ""
+echo "Testing build_progress_bar() color tiers (ANSI codes)..."
+
+for color_data in "10:${green}:GREEN (very_low)" "30:${cyan}:CYAN (low)" "50:${orange}:ORANGE (medium)" "70:${orange}:ORANGE (high)" "90:${red}:RED (critical)"; do
+  pct="${color_data%%:*}"
+  rest="${color_data#*:}"
+  expect_color="${rest%%:*}"
+  label="${rest#*:}"
+  bar=$(build_progress_bar "${pct}")
+  if echo "${bar}" | grep -qF "${expect_color}"; then
+    echo -e "${green}✓${nc} build_progress_bar ${pct}%: ${label} color"
+    passed=$((passed + 1))
+  else
+    echo -e "${red}✗${nc} build_progress_bar ${pct}%: expected ${label} color not found"
+    failed=$((failed + 1))
+  fi
+done
 
 # Test get_random_message_color()
 echo ""

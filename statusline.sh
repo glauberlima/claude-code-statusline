@@ -431,9 +431,8 @@ get_git_info() {
   local git_opts=()
 
   # Validate and set git directory option
-  local is_dir_present_rc=0
-  is_present "${current_dir}" || is_dir_present_rc=$?
-  if [[ "${is_dir_present_rc}" -eq 0 ]]; then
+  # shellcheck disable=SC2310  # is_present is a pure boolean check; set -e propagation is irrelevant here
+  if is_present "${current_dir}"; then
     # Invoke validation separately to avoid masking return value
     local validation_result=0
     validate_directory "${current_dir}"
@@ -550,14 +549,8 @@ build_directory_component() {
   local current_dir="$1"
   local dir_name
 
-  local present_rc=0 valid_rc=0
-  is_present "${current_dir}" || present_rc=$?
-  if [[ "${present_rc}" -eq 0 ]]; then
-    validate_directory "${current_dir}" || valid_rc=$?
-  else
-    valid_rc=1
-  fi
-  if [[ "${valid_rc}" -eq 0 ]]; then
+  # shellcheck disable=SC2310  # is_present/validate_directory are pure boolean checks
+  if is_present "${current_dir}" && validate_directory "${current_dir}"; then
     dir_name=$(get_dirname "${current_dir}")
   else
     dir_name=$(get_dirname "${PWD}")
@@ -599,9 +592,8 @@ build_files_component() {
   local file_count="$1"
 
   # Only show if there are modified files
-  local has_files_rc=0
-  is_present "${file_count}" || has_files_rc=$?
-  if [[ "${has_files_rc}" -eq 0 ]] && [[ "${file_count}" != "0" ]]; then
+  # shellcheck disable=SC2310  # is_present is a pure boolean check
+  if is_present "${file_count}" && [[ "${file_count}" != "0" ]]; then
     echo "${CHANGE_ICON} ${ORANGE}changes${NC}"
   fi
 }
@@ -613,9 +605,8 @@ build_cost_component() {
   [[ "${SHOW_COST}" != "true" ]] && return
 
   # Validate cost is numeric before printf (prevents format string injection)
-  local has_cost_rc=0
-  is_present "${cost_usd}" || has_cost_rc=$?
-  if [[ "${has_cost_rc}" -eq 0 ]] && [[ "${cost_usd}" != "0" ]]; then
+  # shellcheck disable=SC2310  # is_present is a pure boolean check
+  if is_present "${cost_usd}" && [[ "${cost_usd}" != "0" ]]; then
     # Check if value is a valid number (integer or decimal)
     if [[ "${cost_usd}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
       # Use LC_NUMERIC=C to ensure decimal point (not comma) for printf on Windows

@@ -54,14 +54,14 @@ shellcheck statusline.sh install.sh tests/*.sh  # Uses .shellcheckrc config
 ### Component-Based Flow
 
 ```
-JSON Input → Parse (awk) → Load i18n → Build Components → Assemble → ANSI Output
+JSON Input → Parse (awk) → Build Components → Assemble → ANSI Output
 ```
 
 **Key functional areas in statusline.sh**:
 
 - **Configuration**: Colors (ANSI codes), icons (emoji), constants (bar width, separators)
-- **i18n**: Language loading (`load_config()`, `load_language_messages()`)
-- **Utilities**: Directory name extraction (`get_dirname`), separator formatting (`sep`), path validation (`validate_directory`)
+- **i18n**: Messages statically compiled via `@MESSAGES_START` / `@MESSAGES_END` markers
+- **Utilities**: Directory name extraction (`get_dirname`), separator formatting (`sep`), path validation (`validate_directory`), pipe-field parsing (`read_pipe_fields`)
 - **Core logic**: JSON parsing (`parse_claude_input`), git operations (`get_git_info`), progress bar rendering (`build_progress_bar`)
 - **Formatters**: Transform raw data to display format (`format_ahead_behind`, `format_git_branch`)
 - **Component builders**: Individual statusline segments (`build_model_component`, `build_context_component`, `build_directory_component`, `build_git_component`, `build_files_component`, `build_cost_component`)
@@ -91,13 +91,10 @@ This porcelain v2 format requires **git 2.11+** (Dec 2016).
 
 - `validate_directory()`: Prevents path traversal attacks, format string injection
 - Validates against patterns: `..`, format specifiers, null bytes
-- **Allows absolute paths** (commit 6696e50) based on real-world usage
+- **Allows absolute paths** — absolute paths are valid; only `..` traversal, format specifiers, and null bytes are rejected
 - All user-controlled inputs (workspace.current_dir) validated before use
 
-**Recent security hardening** (commit b8deee6):
-
-- Added input sanitization for directory paths
-- Prevents malicious JSON from exploiting shell operations
+**Input sanitization**: `workspace.current_dir` from JSON is validated before any shell operations.
 
 ### State Management
 
@@ -495,7 +492,7 @@ Strategy: High precision when available, uniqueness when not.
 
 ```
 /
-├── statusline.sh          # Main implementation (~650 lines, includes hardcoded English)
+├── statusline.sh          # Main implementation (includes hardcoded English)
 ├── patch-statusline.sh    # Build-time patching tool
 ├── install.sh             # Unix installer script
 ├── README.md              # User-facing documentation
@@ -512,7 +509,8 @@ Strategy: High precision when available, uniqueness when not.
     ├── integration.sh     # End-to-end tests
     ├── shellcheck.sh      # Static analysis
     └── fixtures/
-        └── test-input.json # Sample JSON input
+        ├── test-input.json         # Minimal sample JSON input
+        └── claude-input-real.json  # Real payload captured from Claude Code
 
 After installation (~/.claude/):
 └── statusline.sh           # Deployed script (patched with user's language/config)
