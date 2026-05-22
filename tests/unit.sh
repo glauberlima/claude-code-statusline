@@ -18,16 +18,26 @@ unset _sl_tmp
 
 passed=0
 failed=0
-bar_width=$(eval 'printf "%s" "${BAR_WIDTH}"')
-show_messages=$(eval 'printf "%s" "${SHOW_MESSAGES}"')
-show_cost=$(eval 'printf "%s" "${SHOW_COST}"')
-red=$(eval 'printf "%s" "${RED}"')
-green=$(eval 'printf "%s" "${GREEN}"')
-nc=$(eval 'printf "%s" "${NC}"')
-cyan=$(eval 'printf "%s" "${CYAN}"')
-blue=$(eval 'printf "%s" "${BLUE}"')
-magenta=$(eval 'printf "%s" "${MAGENTA}"')
-orange=$(eval 'printf "%s" "${ORANGE}"')
+# shellcheck disable=SC2154,SC2153
+bar_width="${BAR_WIDTH}"
+# shellcheck disable=SC2154,SC2153
+show_messages="${SHOW_MESSAGES}"
+# shellcheck disable=SC2154,SC2153
+show_cost="${SHOW_COST}"
+# shellcheck disable=SC2154,SC2153
+red="${RED}"
+# shellcheck disable=SC2154,SC2153
+green="${GREEN}"
+# shellcheck disable=SC2154,SC2153
+nc="${NC}"
+# shellcheck disable=SC2154,SC2153
+cyan="${CYAN}"
+# shellcheck disable=SC2154,SC2153
+blue="${BLUE}"
+# shellcheck disable=SC2154,SC2153
+magenta="${MAGENTA}"
+# shellcheck disable=SC2154,SC2153
+orange="${ORANGE}"
 
 test() {
   local name="$1"
