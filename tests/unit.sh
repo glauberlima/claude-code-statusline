@@ -327,6 +327,81 @@ parsed=$(parse_claude_input '{
 } <<< "${parsed}"
 test "parse_claude_input preserves raw used_percentage before clamp" "150" "${parsed_line_5}"
 
+# Test 7th field: thinking_active
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "max"},
+  "thinking": {"enabled": true}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=1 when effort=max and thinking=true" "1" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "high"},
+  "thinking": {"enabled": true}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort=high (not max)" "0" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort/thinking absent" "0" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "max"},
+  "thinking": {"enabled": false}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort=max but thinking=false" "0" "${parsed_line_7}"
+
 echo ""
 echo "Testing build_context_component()..."
 result=$(build_context_component "200000" "55460" "28" | strip_ansi)
@@ -353,6 +428,26 @@ if echo "${result}" | grep -q "0% 2.0K/200K"; then
   passed=$((passed + 1))
 else
   echo -e "${red}✗${nc} build_context_component failed to clamp negative percentage"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+
+result=$(build_context_component "200000" "54000" "27" "1" | strip_ansi)
+if echo "${result}" | grep -q "🧠"; then
+  echo -e "${green}✓${nc} build_context_component shows brain when thinking_active=1"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component missing brain when thinking_active=1"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+
+result=$(build_context_component "200000" "54000" "27" "0" | strip_ansi)
+if ! echo "${result}" | grep -q "🧠"; then
+  echo -e "${green}✓${nc} build_context_component hides brain when thinking_active=0"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component shows brain when thinking_active=0"
   echo "  Output: ${result}"
   failed=$((failed + 1))
 fi

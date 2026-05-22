@@ -484,6 +484,19 @@ main() {
     "thinking": {"enabled": true}
   }' "🧠"
 
+  run_test_absent "Brain: absent when effort=max but thinking=false" '{
+    "model": {"display_name": "Opus"},
+    "workspace": {"current_dir": "/test/project"},
+    "context_window": {
+      "context_window_size": 200000,
+      "current_usage": {"input_tokens": 50000},
+      "used_percentage": 25
+    },
+    "cost": {"total_cost_usd": 0},
+    "effort": {"level": "max"},
+    "thinking": {"enabled": false}
+  }' "🧠"
+
   run_test_absent "Brain: absent when effort/thinking fields missing" '{
     "model": {"display_name": "Opus"},
     "workspace": {"current_dir": "/test/project"},
