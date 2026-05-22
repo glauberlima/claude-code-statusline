@@ -181,10 +181,11 @@ EOF
 parse_claude_input() {
   local input="$1"
 
-  # Single awk call replaces jq. Three helper functions handle nested JSON:
+  # Single awk call replaces jq. Four helper functions handle nested JSON:
   #   obj_content: extracts the content of { } for a given key (depth-tracked, string-aware)
   #   str_val:     extracts a string value for a key from a JSON fragment
   #   num_val:     extracts a numeric value for a key from a JSON fragment
+  #   bool_val:    extracts a JSON boolean value ("true"/"false") for a key
   local parsed
   parsed=$(echo "${input}" | awk '
     { doc = (NR == 1) ? $0 : doc "\n" $0 }
@@ -221,12 +222,21 @@ parse_claude_input() {
       cost_usd   = num_val(cost_block, "total_cost_usd")
       if (cost_usd == "") cost_usd = "0"
 
+      effort_block     = obj_content(doc, "effort")
+      effort_level     = str_val(effort_block, "level")
+
+      thinking_block   = obj_content(doc, "thinking")
+      thinking_enabled = bool_val(thinking_block, "enabled")
+
+      thinking_active = (effort_level == "max" && thinking_enabled == "true") ? "1" : "0"
+
       print model_name
       print current_dir
       print context_size
       print current_usage
       print context_percent
       print cost_usd
+      print thinking_active
     }
 
     # Return the fragment starting at { and ending before the matching } for the
@@ -289,6 +299,17 @@ parse_claude_input() {
       match(rest, /^-?[0-9][0-9.eE+\-]*/)
       if (RLENGTH <= 0) return ""
       return substr(rest, RSTART, RLENGTH)
+    }
+
+    # Return "true" or "false" for a JSON boolean key, or "" if absent.
+    function bool_val(s, key,    pat, rest) {
+      if (s == "") return ""
+      pat = "\"" key "\"[[:space:]]*:[[:space:]]*"
+      if (!match(s, pat)) return ""
+      rest = substr(s, RSTART + RLENGTH)
+      if (rest ~ /^true/)  return "true"
+      if (rest ~ /^false/) return "false"
+      return ""
     }
   ' 2>/dev/null) || {
     echo "Error: Failed to parse JSON input" >&2
@@ -678,13 +699,13 @@ main() {
   # Validate field count (expected: 6 lines)
   local line_count
   line_count=$(printf '%s\n' "${parsed}" | wc -l)
-  if [[ ${line_count} -ne 6 ]]; then
-    echo "Error: Expected 6 fields from JSON, got ${line_count}" >&2
+  if [[ ${line_count} -ne 7 ]]; then
+    echo "Error: Expected 7 fields from JSON, got ${line_count}" >&2
     exit 1
   fi
 
   # Extract fields
-  local model_name current_dir context_size current_usage context_percent cost_usd
+  local model_name current_dir context_size current_usage context_percent cost_usd thinking_active
   {
     read -r model_name
     read -r current_dir
@@ -692,12 +713,14 @@ main() {
     read -r current_usage
     read -r context_percent
     read -r cost_usd
+    # shellcheck disable=SC2034  # thinking_active will be consumed by build_context_component
+    read -r thinking_active
   } << EOF
 ${parsed}
 EOF
 
   # Strip carriage returns (Windows line endings compatibility)
-  for _v in model_name current_dir context_size current_usage context_percent cost_usd; do
+  for _v in model_name current_dir context_size current_usage context_percent cost_usd thinking_active; do
     declare "${_v}=${!_v%$'\r'}"
   done
 
