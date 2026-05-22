@@ -187,7 +187,7 @@ parse_claude_input() {
   #   num_val:     extracts a numeric value for a key from a JSON fragment
   #   bool_val:    extracts a JSON boolean value ("true"/"false") for a key
   local parsed
-  parsed=$(echo "${input}" | awk '
+  parsed=$(awk '
     { doc = (NR == 1) ? $0 : doc "\n" $0 }
     END {
       model_block  = obj_content(doc, "model")
@@ -311,7 +311,7 @@ parse_claude_input() {
       if (rest ~ /^false/) return "false"
       return ""
     }
-  ' 2>/dev/null) || {
+  ' <<< "${input}" 2>/dev/null) || {
     echo "Error: Failed to parse JSON input" >&2
     return 1
   }
@@ -723,9 +723,13 @@ ${parsed}
 EOF
 
   # Strip carriage returns (Windows line endings compatibility)
-  for _v in model_name current_dir context_size current_usage context_percent cost_usd thinking_active; do
-    declare "${_v}=${!_v%$'\r'}"
-  done
+  model_name="${model_name%$'\r'}"
+  current_dir="${current_dir%$'\r'}"
+  context_size="${context_size%$'\r'}"
+  current_usage="${current_usage%$'\r'}"
+  context_percent="${context_percent%$'\r'}"
+  cost_usd="${cost_usd%$'\r'}"
+  thinking_active="${thinking_active%$'\r'}"
 
   # Build components (read toggle flags from global constants)
   local model_part context_part dir_part git_part cost_part files_part
