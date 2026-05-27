@@ -186,12 +186,13 @@ EOF
 parse_claude_input() {
   local input="$1"
 
-  # Single awk call replaces jq. Three helper functions handle nested JSON:
+  # Single awk call replaces jq. Four helper functions handle nested JSON:
   #   obj_content: extracts the content of { } for a given key (depth-tracked, string-aware)
   #   str_val:     extracts a string value for a key from a JSON fragment
   #   num_val:     extracts a numeric value for a key from a JSON fragment
+  #   bool_val:    extracts a JSON boolean value ("true"/"false") for a key
   local parsed
-  parsed=$(echo "${input}" | awk '
+  parsed=$(awk '
     { doc = (NR == 1) ? $0 : doc "\n" $0 }
     END {
       model_block  = obj_content(doc, "model")
@@ -226,12 +227,21 @@ parse_claude_input() {
       cost_usd   = num_val(cost_block, "total_cost_usd")
       if (cost_usd == "") cost_usd = "0"
 
+      effort_block     = obj_content(doc, "effort")
+      effort_level     = str_val(effort_block, "level")
+
+      thinking_block   = obj_content(doc, "thinking")
+      thinking_enabled = bool_val(thinking_block, "enabled")
+
+      thinking_active = (effort_level == "max" && thinking_enabled == "true") ? "1" : "0"
+
       print model_name
       print current_dir
       print context_size
       print current_usage
       print context_percent
       print cost_usd
+      print thinking_active
     }
 
     # Return the fragment starting at { and ending before the matching } for the
@@ -295,7 +305,18 @@ parse_claude_input() {
       if (RLENGTH <= 0) return ""
       return substr(rest, RSTART, RLENGTH)
     }
-  ' 2>/dev/null) || {
+
+    # Return "true" or "false" for a JSON boolean key, or "" if absent.
+    function bool_val(s, key,    pat, rest) {
+      if (s == "") return ""
+      pat = "\"" key "\"[[:space:]]*:[[:space:]]*"
+      if (!match(s, pat)) return ""
+      rest = substr(s, RSTART + RLENGTH)
+      if (rest ~ /^true/)  return "true"
+      if (rest ~ /^false/) return "false"
+      return ""
+    }
+  ' <<< "${input}" 2>/dev/null) || {
     echo "Error: Failed to parse JSON input" >&2
     return 1
   }
@@ -516,6 +537,7 @@ build_context_component() {
   local context_size="$1"
   local current_usage="$2"
   local context_percent="$3"
+  local thinking_active="${4:-0}"
 
   context_percent=$(clamp_percent "${context_percent}")
 
@@ -529,6 +551,9 @@ build_context_component() {
   local size_formatted
   size_formatted=$(format_number "${context_size}")
 
+  local brain_part=""
+  [[ "${thinking_active}" == "1" ]] && brain_part=" 🧠"
+
   # Build message part conditionally (read from global SHOW_MESSAGES)
   local message_part=""
   if [[ "${SHOW_MESSAGES}" == "true" ]]; then
@@ -541,8 +566,8 @@ build_context_component() {
     message_part=" ${GRAY}|${NC} ${msg_color}${message}${NC}"
   fi
 
-  # Output with brackets, colored bar, formatted numbers, and optional message
-  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted}${message_part}"
+  # Output with brackets, colored bar, formatted numbers, brain indicator, and optional message
+  echo "${CONTEXT_ICON} ${GRAY}[${NC}${bar}${GRAY}]${NC} ${context_percent}% ${usage_formatted}/${size_formatted}${brain_part}${message_part}"
 }
 
 build_directory_component() {
@@ -691,16 +716,16 @@ main() {
     exit 1
   fi
 
-  # Validate field count (expected: 6 lines)
+  # Validate field count (expected: 7 lines)
   local line_count
   line_count=$(printf '%s\n' "${parsed}" | wc -l)
-  if [[ ${line_count} -ne 6 ]]; then
-    echo "Error: Expected 6 fields from JSON, got ${line_count}" >&2
+  if [[ ${line_count} -ne 7 ]]; then
+    echo "Error: Expected 7 fields from JSON, got ${line_count}" >&2
     exit 1
   fi
 
   # Extract fields
-  local model_name current_dir context_size current_usage context_percent cost_usd
+  local model_name current_dir context_size current_usage context_percent cost_usd thinking_active
   {
     read -r model_name
     read -r current_dir
@@ -708,14 +733,19 @@ main() {
     read -r current_usage
     read -r context_percent
     read -r cost_usd
+    read -r thinking_active
   } << EOF
 ${parsed}
 EOF
 
   # Strip carriage returns (Windows line endings compatibility)
-  for _v in model_name current_dir context_size current_usage context_percent cost_usd; do
-    declare "${_v}=${!_v%$'\r'}"
-  done
+  model_name="${model_name%$'\r'}"
+  current_dir="${current_dir%$'\r'}"
+  context_size="${context_size%$'\r'}"
+  current_usage="${current_usage%$'\r'}"
+  context_percent="${context_percent%$'\r'}"
+  cost_usd="${cost_usd%$'\r'}"
+  thinking_active="${thinking_active%$'\r'}"
 
   # Capture epoch time for wave animation (EPOCHSECONDS is free on bash 5+)
   if [[ "${SHOW_RAINBOW_WAVE}" == "true" ]]; then
@@ -729,7 +759,7 @@ EOF
   # Build components (read toggle flags from global constants)
   local model_part context_part dir_part git_part cost_part files_part
   model_part=$(build_model_component "${model_name}")
-  context_part=$(build_context_component "${context_size}" "${current_usage}" "${context_percent}")
+  context_part=$(build_context_component "${context_size}" "${current_usage}" "${context_percent}" "${thinking_active}")
   dir_part=$(build_directory_component "${current_dir}")
 
   # Git component returns "git_display|file_count"

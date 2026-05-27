@@ -18,16 +18,26 @@ unset _sl_tmp
 
 passed=0
 failed=0
-bar_width=$(eval 'printf "%s" "${BAR_WIDTH}"')
-show_messages=$(eval 'printf "%s" "${SHOW_MESSAGES}"')
-show_cost=$(eval 'printf "%s" "${SHOW_COST}"')
-red=$(eval 'printf "%s" "${RED}"')
-green=$(eval 'printf "%s" "${GREEN}"')
-nc=$(eval 'printf "%s" "${NC}"')
-cyan=$(eval 'printf "%s" "${CYAN}"')
-blue=$(eval 'printf "%s" "${BLUE}"')
-magenta=$(eval 'printf "%s" "${MAGENTA}"')
-orange=$(eval 'printf "%s" "${ORANGE}"')
+# shellcheck disable=SC2154,SC2153
+bar_width="${BAR_WIDTH}"
+# shellcheck disable=SC2154,SC2153
+show_messages="${SHOW_MESSAGES}"
+# shellcheck disable=SC2154,SC2153
+show_cost="${SHOW_COST}"
+# shellcheck disable=SC2154,SC2153
+red="${RED}"
+# shellcheck disable=SC2154,SC2153
+green="${GREEN}"
+# shellcheck disable=SC2154,SC2153
+nc="${NC}"
+# shellcheck disable=SC2154,SC2153
+cyan="${CYAN}"
+# shellcheck disable=SC2154,SC2153
+blue="${BLUE}"
+# shellcheck disable=SC2154,SC2153
+magenta="${MAGENTA}"
+# shellcheck disable=SC2154,SC2153
+orange="${ORANGE}"
 
 test() {
   local name="$1"
@@ -327,6 +337,81 @@ parsed=$(parse_claude_input '{
 } <<< "${parsed}"
 test "parse_claude_input preserves raw used_percentage before clamp" "150" "${parsed_line_5}"
 
+# Test 7th field: thinking_active
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "max"},
+  "thinking": {"enabled": true}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=1 when effort=max and thinking=true" "1" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "high"},
+  "thinking": {"enabled": true}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort=high (not max)" "0" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort/thinking absent" "0" "${parsed_line_7}"
+
+parsed=$(parse_claude_input '{
+  "model": {"display_name": "Opus"},
+  "workspace": {"current_dir": "/tmp/t"},
+  "context_window": {
+    "context_window_size": 200000,
+    "current_usage": {"input_tokens": 1000},
+    "used_percentage": 10
+  },
+  "cost": {"total_cost_usd": 0},
+  "effort": {"level": "max"},
+  "thinking": {"enabled": false}
+}')
+parsed_line_7=""
+{
+  read -r _; read -r _; read -r _; read -r _; read -r _; read -r _
+  read -r parsed_line_7 || true
+} <<< "${parsed}"
+test "parse_claude_input thinking_active=0 when effort=max but thinking=false" "0" "${parsed_line_7}"
+
 echo ""
 echo "Testing build_context_component()..."
 result=$(build_context_component "200000" "55460" "28" | strip_ansi)
@@ -353,6 +438,26 @@ if echo "${result}" | grep -q "0% 2.0K/200K"; then
   passed=$((passed + 1))
 else
   echo -e "${red}✗${nc} build_context_component failed to clamp negative percentage"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+
+result=$(build_context_component "200000" "54000" "27" "1" | strip_ansi)
+if echo "${result}" | grep -q "🧠"; then
+  echo -e "${green}✓${nc} build_context_component shows brain when thinking_active=1"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component missing brain when thinking_active=1"
+  echo "  Output: ${result}"
+  failed=$((failed + 1))
+fi
+
+result=$(build_context_component "200000" "54000" "27" "0" | strip_ansi)
+if ! echo "${result}" | grep -q "🧠"; then
+  echo -e "${green}✓${nc} build_context_component hides brain when thinking_active=0"
+  passed=$((passed + 1))
+else
+  echo -e "${red}✗${nc} build_context_component shows brain when thinking_active=0"
   echo "  Output: ${result}"
   failed=$((failed + 1))
 fi
@@ -395,8 +500,12 @@ bar_50=$(build_progress_bar 50)
 bar_stripped=$(echo -e "${bar_50}" | strip_ansi)
 
 # Count total chars by summing filled + empty (wc -m is unreliable for multibyte UTF-8 on Windows)
-filled_50=$(echo "${bar_stripped}" | grep -o "█" | wc -l | tr -d ' \t') || filled_50=0
-empty_50=$(echo "${bar_stripped}" | grep -o "░" | wc -l | tr -d ' \t') || empty_50=0
+_bar_without_filled="${bar_stripped//█/}"
+_bar_without_empty="${bar_stripped//░/}"
+# shellcheck disable=SC2154
+filled_50=$(( (${#bar_stripped} - ${#_bar_without_filled}) / ${#BAR_FILLED} ))
+# shellcheck disable=SC2154
+empty_50=$(( (${#bar_stripped} - ${#_bar_without_empty}) / ${#BAR_EMPTY} ))
 char_count=$(( filled_50 + empty_50 ))
 test "progress bar character count (50%)" "${bar_width}" "${char_count}"
 
@@ -429,12 +538,16 @@ fi
 # Test edge cases
 bar_0=$(build_progress_bar 0)
 bar_0_stripped=$(echo -e "${bar_0}" | strip_ansi)
-empty_0_count=$(( $(echo -n "${bar_0_stripped}" | grep -o "░" | wc -l) ))
+_bar0_without_empty="${bar_0_stripped//░/}"
+# shellcheck disable=SC2154
+empty_0_count=$(( (${#bar_0_stripped} - ${#_bar0_without_empty}) / ${#BAR_EMPTY} ))
 test "0% progress bar (all empty)" "${bar_width}" "${empty_0_count}"
 
 bar_100=$(build_progress_bar 100)
 bar_100_stripped=$(echo -e "${bar_100}" | strip_ansi)
-filled_100_count=$(( $(echo -n "${bar_100_stripped}" | grep -o "█" | wc -l) ))
+_bar100_without_filled="${bar_100_stripped//█/}"
+# shellcheck disable=SC2154
+filled_100_count=$(( (${#bar_100_stripped} - ${#_bar100_without_filled}) / ${#BAR_FILLED} ))
 test "100% progress bar (all filled)" "${bar_width}" "${filled_100_count}"
 
 # --- Progress bar regression: bar math ---
@@ -444,10 +557,10 @@ echo "Testing build_progress_bar() bar math (exact char counts)..."
 count_bar_chars() {
   local bar_output="$1"
   local char="$2"
-  local stripped count
+  local stripped without count
   stripped=$(echo "${bar_output}" | strip_ansi)
-  # || count=0: grep exits 1 when no match found; safe under set -e because it's left of ||
-  count=$(echo "${stripped}" | grep -o "${char}" | wc -l | tr -d ' \t') || count=0
+  without="${stripped//"${char}"/}"
+  count=$(( (${#stripped} - ${#without}) / ${#char} ))
   echo "${count}"
 }
 

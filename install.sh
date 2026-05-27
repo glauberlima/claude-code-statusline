@@ -144,8 +144,8 @@ check_git_version() {
   git_version_str=$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1)
   [[ -z "${git_version_str}" ]] && return 1
 
-  major=$(echo "${git_version_str}" | cut -d. -f1)
-  minor=$(echo "${git_version_str}" | cut -d. -f2)
+  major="${git_version_str%%.*}"
+  minor="${git_version_str#*.}"
 
   if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 11 ]]; then
     return 1
