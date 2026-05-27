@@ -43,8 +43,8 @@ readonly NUM_WAVE_COLORS=12
 # RUNTIME CONFIGURATION (Patched by patch-statusline.sh)
 # ============================================================
 # @CONFIG_START
-readonly SHOW_MESSAGES=false
-readonly SHOW_COST=false
+readonly SHOW_MESSAGES=true
+readonly SHOW_COST=true
 readonly SHOW_RAINBOW_WAVE=false
 # @CONFIG_END
 
