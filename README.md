@@ -42,90 +42,38 @@ irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/in
 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.cmd -o install.cmd && install.cmd && del install.cmd
 ```
 
-> **Windows requires [Git for Windows](https://git-scm.com/download/win).** Install it first if you don't have it.
+### Custom install directory
 
-## Manual Installation
+Override where the binary and config are installed (default: `~/.claude`):
 
-Use this if you can't run the one-liner (corporate proxy, air-gapped environment, restricted shell).
-
-### macOS / Linux / WSL
-
-**1. Get the files**
 ```bash
-git clone https://github.com/glauberlima/claude-code-statusline.git
-cd claude-code-statusline
+# bash/zsh
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --install-dir /custom/path
 ```
 
-**2. Patch for language and features** _(optional — skip for English with messages/cost off)_
-```bash
-# English with messages enabled
-./patch-statusline.sh statusline.sh messages/en.json
-
-# Portuguese, no cost display
-./patch-statusline.sh statusline.sh messages/pt.json --no-cost
-
-# Disable messages entirely
-./patch-statusline.sh statusline.sh --no-messages
-```
-
-**3. Copy to `~/.claude/`**
-```bash
-mkdir -p ~/.claude
-cp statusline.sh ~/.claude/statusline.sh
-chmod +x ~/.claude/statusline.sh
-```
-
-**4. Add to `~/.claude/settings.json`**
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 0
-  }
-}
-```
-
-<details>
-<summary><strong>Windows (PowerShell)</strong></summary>
-
-**1. Download the files** (run in PowerShell)
 ```powershell
-$base = "https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main"
-New-Item -ItemType Directory -Force statusline | Out-Null
-Set-Location statusline
-Invoke-WebRequest "$base/statusline.sh" -OutFile statusline.sh
-Invoke-WebRequest "$base/patch-statusline.sh" -OutFile patch-statusline.sh
-New-Item -ItemType Directory -Force messages | Out-Null
-foreach ($lang in "en","pt","es") {
-  Invoke-WebRequest "$base/messages/$lang.json" -OutFile "messages/$lang.json"
-}
+# PowerShell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\custom"
 ```
 
-**2. Patch via Git Bash** _(optional — skip for English with messages/cost off)_
-```bash
-# Run these in Git Bash, not PowerShell
-./patch-statusline.sh statusline.sh messages/en.json
+```cmd
+:: CMD
+install.cmd --install-dir C:\custom
 ```
 
-**3. Copy to `%USERPROFILE%\.claude\`** (run in PowerShell)
-```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude" | Out-Null
-Copy-Item statusline.sh "$env:USERPROFILE\.claude\statusline.sh"
-```
+> **Note:** When using a custom install directory, you must manually update `~/.claude/settings.json` to point to the new binary location.
 
-**4. Add to `%USERPROFILE%\.claude\settings.json`**
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 0
-  }
-}
-```
+## 📥 Direct Downloads
 
-</details>
+Pre-built binaries are published with every release. These URLs always point to the latest version:
+
+| Platform | URL |
+|----------|-----|
+| macOS (universal) | [`statusline-macos`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-macos) |
+| Linux x64 | [`statusline-linux-x64`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-linux-x64) |
+| Windows x64 | [`statusline-windows-x64.exe`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-windows-x64.exe) |
+
+The install scripts above use these URLs automatically. For local development, use `--dev` to build from source with `cargo build`.
 
 ## Features
 
@@ -136,21 +84,29 @@ Copy-Item statusline.sh "$env:USERPROFILE\.claude\statusline.sh"
 - 📊 **Context usage** with progress bar and funny messages
 - 💰 **Cost tracking**
 
-**Multi-language**: English, Brazilian Portuguese, Spanish
-
 ## ⚙️ Configuration
 
-Re-run the installer to change language or toggle features. Use the same command for your platform as in Quick Install above.
+Edit `~/.claude/statusline.toml` to customize features. Generate the default config:
+
+**macOS / Linux / WSL**
+```bash
+~/.claude/statusline --print-defaults > ~/.claude/statusline.toml
+```
+
+**Windows — PowerShell**
+```powershell
+& "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
+```
+
+Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`).
 
 ## 🛠️ Development
 
 ### Testing
 
 ```bash
-./tests/unit.sh && ./tests/integration.sh && ./tests/shellcheck.sh
+cargo test
 ```
-
-ShellCheck reference: https://www.shellcheck.net/
 
 ### Contributing
 

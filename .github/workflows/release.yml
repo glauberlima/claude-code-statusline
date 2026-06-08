@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    name: Build macOS universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.96.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.0'
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - name: Build x86_64
+        run: cargo build --release --target x86_64-apple-darwin
+      - name: Build aarch64
+        run: cargo build --release --target aarch64-apple-darwin
+      - name: Create universal binary
+        run: |
+          lipo -create \
+            target/x86_64-apple-darwin/release/statusline \
+            target/aarch64-apple-darwin/release/statusline \
+            -output statusline-macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statusline-macos
+          path: statusline-macos
+
+  build-linux:
+    name: Build Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.96.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.0'
+      - name: Build
+        run: cargo build --release
+      - name: Copy artifact
+        run: cp target/release/statusline statusline-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statusline-linux-x64
+          path: statusline-linux-x64
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.96.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.0'
+      - name: Build
+        run: cargo build --release
+      - name: Copy artifact
+        run: copy target\release\statusline.exe statusline-windows-x64.exe
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statusline-windows-x64
+          path: statusline-windows-x64.exe
+
+  release:
+    name: Create GitHub Release
+    needs: [build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            statusline-macos/statusline-macos
+            statusline-linux-x64/statusline-linux-x64
+            statusline-windows-x64/statusline-windows-x64.exe

@@ -7,6 +7,7 @@
   },
   "context_window": {
     "context_window_size": 200000,
+    "remaining_percentage": 97.5,
     "current_usage": {
       "input_tokens": 5000,
       "cache_creation_input_tokens": 0,

@@ -8,10 +8,15 @@ charset = utf-8
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-# Shell scripts
-[*.sh]
+# Rust files
+[*.rs]
 indent_style = space
-indent_size = 2
+indent_size = 4
+
+# TOML files
+[*.toml]
+indent_style = space
+indent_size = 4
 
 # JSON files
 [*.json]

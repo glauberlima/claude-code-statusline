@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# install.sh - Installer for statusline.sh
-# Acquires files (local or remote), patches with user preferences, installs to ~/.claude/
+# install.sh - Installer for statusline (Rust binary)
+# Downloads the latest release binary and configures Claude Code.
 
 set -euo pipefail
 
 # ============================================================================
 # Configuration
 # ============================================================================
-readonly TARGET_DIR="${HOME}/.claude"
-readonly TARGET_FILE="${TARGET_DIR}/statusline.sh"
 readonly SETTINGS_FILE="${HOME}/.claude/settings.json"
-# shellcheck disable=SC2088  # Keep ~ literal so the command remains shell-safe for homes with spaces.
-readonly SETTINGS_COMMAND='~/.claude/statusline.sh'
-readonly GITHUB_BASE_URL="https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main"
 readonly EXIT_PARTIAL_FAILURE=2
+SETTINGS_COMMAND=''  # set by parse_args after INSTALL_DIR is resolved
 readonly MAX_DOWNLOAD_RETRIES=3
 
 # ANSI color codes
@@ -30,30 +26,20 @@ readonly CROSS_MARK="✗"
 readonly WARNING_SIGN="⚠️"
 readonly ARROW="→"
 
-# Mutable globals (set by acquire_files)
-TEMP_DIR=""
-WORKING_DIR=""
-INSTALL_MODE="local"
+# Install configuration (set by parse_args or defaults)
+INSTALL_DEV_MODE=false
+INSTALL_DIR=""           # install directory (defaults to ~/.claude)
 
 # ============================================================================
 # Utility Functions
 # ============================================================================
-
-is_piped() { [[ ! -t 2 ]]; }
 
 is_wsl() {
   [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
 
-cleanup_temp() {
-  if [[ -n "${TEMP_DIR}" ]] && [[ -d "${TEMP_DIR}" ]]; then
-    rm -rf "${TEMP_DIR}"
-  fi
-}
-
 cleanup_on_error() {
-  cleanup_temp
   echo ""
   error "Installation failed. No changes made."
   exit 1
@@ -77,24 +63,17 @@ print_header() {
 }
 
 print_footer() {
-  local mode="$1"
-  local language="${2:-en}"
-  local components="${3:-messages cost}"
-
   echo ""
   echo "╔══════════════════════════════════════════════════╗"
   echo "║              Installation Complete!              ║"
   echo "╚══════════════════════════════════════════════════╝"
   echo ""
-  echo "Installed: ${TARGET_FILE}"
-  echo "Mode: ${mode}"
-  if [[ "${components}" == *"messages"* ]]; then
-    echo "Language: ${language}"
-  fi
+  echo "Installed: ${INSTALL_DIR}/statusline"
   echo ""
   echo -e "${CYAN}Next step:${NC} Restart Claude Code to see your new statusline"
   echo ""
   echo "To update, run the installation command again."
+  echo "To customize, edit ${INSTALL_DIR}/statusline.toml"
   echo ""
 }
 
@@ -116,85 +95,34 @@ muted()   { echo -e "${MUTED}$1${NC}"; }
 # Validation Functions
 # ============================================================================
 
-check_bash_version() {
-  if [[ "${BASH_VERSINFO[0]}" -lt 3 ]] || \
-     [[ "${BASH_VERSINFO[0]}" -eq 3 && "${BASH_VERSINFO[1]}" -lt 2 ]]; then
-    echo "Error: bash 3.2+ required (found ${BASH_VERSION})"
-    return 1
-  fi
-  return 0
-}
-
-generate_timestamp() {
-  date +%s%N 2>/dev/null || date +%s
-}
-
 extract_version() {
   local cmd="$1"
   "${cmd}" --version 2>/dev/null | grep -oE '[0-9.]+' | head -n1 || echo 'found'
 }
 
-check_git_version() {
-  local git_version_str major minor
-
-  if ! command -v git >/dev/null 2>&1; then
-    return 1
-  fi
-
-  git_version_str=$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n1)
-  [[ -z "${git_version_str}" ]] && return 1
-
-  major="${git_version_str%%.*}"
-  minor="${git_version_str#*.}"
-
-  if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 11 ]]; then
-    return 1
-  fi
-  return 0
-}
-
 check_dependencies() {
   local missing=()
-  local status=0
 
-  set +e
-  check_bash_version
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
-    missing+=("bash 3.2+")
-  fi
   command -v claude >/dev/null 2>&1 || missing+=("claude")
-  command -v curl >/dev/null 2>&1 || missing+=("curl")
-  command -v node >/dev/null 2>&1 || missing+=("node")
-  set +e
-  check_git_version
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
-    missing+=("git 2.11+")
-  fi
+  command -v curl   >/dev/null 2>&1 || missing+=("curl")
+  command -v node   >/dev/null 2>&1 || missing+=("node")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     show_install_instructions "${missing[@]}"
     return 1
   fi
 
-  local v_curl v_claude v_node v_git
-  v_curl=$(extract_version curl); v_claude=$(extract_version claude)
-  v_node=$(extract_version node); v_git=$(extract_version git)
-  success "bash ${BASH_VERSION}"
+  local v_curl v_claude v_node
+  v_curl=$(extract_version curl)
+  v_claude=$(extract_version claude)
+  v_node=$(extract_version node)
   success "curl ${v_curl}"
   success "claude ${v_claude}"
   success "node ${v_node}"
-  success "git ${v_git}"
-  set +e
-  is_wsl
-  status=$?
-  set -e
-  if [[ ${status} -eq 0 ]]; then
-    muted "  Detected: WSL environment"
-  fi
+
+  local wsl_status=0
+  set +e; is_wsl; wsl_status=$?; set -e
+  [[ ${wsl_status} -eq 0 ]] && muted "  Detected: WSL environment"
 
   return 0
 }
@@ -220,7 +148,7 @@ show_install_instructions() {
   case "${platform}" in
     Darwin)
       echo -e "${CYAN}Install on macOS:${NC}"
-      echo "  brew install curl git node"
+      echo "  brew install curl node"
       ;;
     Linux)
       local wsl_status=0
@@ -234,18 +162,18 @@ show_install_instructions() {
         echo -e "${CYAN}Install on Linux:${NC}"
       fi
       if command -v apt-get >/dev/null 2>&1; then
-        echo "  sudo apt-get update && sudo apt-get install curl git nodejs"
+        echo "  sudo apt-get update && sudo apt-get install curl nodejs"
       elif command -v yum >/dev/null 2>&1; then
-        echo "  sudo yum install curl git nodejs"
+        echo "  sudo yum install curl nodejs"
       elif command -v dnf >/dev/null 2>&1; then
-        echo "  sudo dnf install curl git nodejs"
+        echo "  sudo dnf install curl nodejs"
       else
-        echo "  Use your package manager to install: curl git node"
+        echo "  Use your package manager to install: curl node"
       fi
       ;;
     *)
       echo -e "${CYAN}Please install the following dependencies:${NC}"
-      echo "  - curl, node, git 2.11+, bash 3.2+"
+      echo "  - curl, node"
       ;;
   esac
 
@@ -279,242 +207,122 @@ download_file() {
   return 0
 }
 
-validate_file() {
-  local file="$1"
-  local first_line
-
-  if [[ ! -s "${file}" ]]; then
-    error "File does not exist or is empty"
-    return 1
-  fi
-
-  IFS= read -r first_line < "${file}" || return 1
-  if [[ ! "${first_line}" =~ ^#!/.*bash ]]; then
-    error "Invalid file format (missing bash shebang)"
-    return 1
-  fi
-
-  if ! grep -q 'assemble_statusline' "${file}"; then
-    error "File does not appear to be statusline.sh"
-    return 1
-  fi
-  return 0
-}
-
 # ============================================================================
-# Acquisition Functions
+# Argument Parsing
 # ============================================================================
 
-# Detect local or remote mode, set WORKING_DIR and INSTALL_MODE globals.
-# Local mode: all files already present in current directory.
-# Remote mode: downloads statusline.sh, patch-statusline.sh, messages/*.json to TEMP_DIR.
-acquire_files() {
-  local status=0
-
-  if [[ -f "./statusline.sh" && -f "./patch-statusline.sh" && -d "./messages" ]]; then
-    INSTALL_MODE="local"
-    WORKING_DIR="$(pwd)"
-    info "Using local files from current directory"
-
-    # Refuse to install from unsafe directories
-    case "${WORKING_DIR}" in
-      / | /tmp | "${TMPDIR:-/tmp}")
-        error "Refusing to install from unsafe directory: ${WORKING_DIR}"
-        return 1
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dev)
+        INSTALL_DEV_MODE=true
+        shift
         ;;
-      *) ;;
+      --install-dir)
+        [[ -n "${2:-}" ]] || { error "--install-dir requires an argument"; exit 1; }
+        INSTALL_DIR="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
     esac
-
-    set +e
-    validate_file "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
-    success "Local files validated"
-  else
-    INSTALL_MODE="remote"
-    info "Downloading files from GitHub..."
-
-    TEMP_DIR=$(mktemp -d -t statusline.XXXXXX) || {
-      error "Failed to create temporary directory"
-      return 1
-    }
-    WORKING_DIR="${TEMP_DIR}"
-    mkdir -p "${WORKING_DIR}/messages"
-
-    # Download main scripts
-    set +e
-    download_file "${GITHUB_BASE_URL}/statusline.sh" "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
-    set +e
-    download_file "${GITHUB_BASE_URL}/patch-statusline.sh" "${WORKING_DIR}/patch-statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
-    chmod +x "${WORKING_DIR}/patch-statusline.sh"
-
-    # Download language message files (warn on partial failure, don't abort)
-    for lang in en pt es; do
-      set +e
-      download_file "${GITHUB_BASE_URL}/messages/${lang}.json" \
-        "${WORKING_DIR}/messages/${lang}.json"
-      status=$?
-      set -e
-      if [[ ${status} -ne 0 ]]; then
-        warn "Failed to download messages/${lang}.json"
-      fi
-    done
-
-    set +e
-    validate_file "${WORKING_DIR}/statusline.sh"
-    status=$?
-    set -e
-    [[ ${status} -eq 0 ]] || return 1
-    success "Files downloaded and validated"
-  fi
-  return 0
-}
-
-# ============================================================================
-# Patching Functions
-# ============================================================================
-
-# Run patch-statusline.sh with language JSON and feature flags derived from
-# the user's component selection string (e.g., "messages cost").
-apply_patches() {
-  local working_dir="$1"
-  local language="$2"
-  local components="$3"
-
-  local patch_script="${working_dir}/patch-statusline.sh"
-  local statusline_file="${working_dir}/statusline.sh"
-
-  chmod +x "${patch_script}"
-
-  local patch_args=("${statusline_file}" "${working_dir}/messages/${language}.json")
-  [[ "${components}" != *"messages"* ]]      && patch_args+=("--no-messages")
-  [[ "${components}" != *"cost"* ]]          && patch_args+=("--no-cost")
-  [[ "${components}" != *"rainbow-wave"* ]]  && patch_args+=("--no-rainbow-wave")
-
-  "${patch_script}" "${patch_args[@]}" || {
-    error "Patching failed"
-    return 1
-  }
-  return 0
-}
-
-# ============================================================================
-# Preference Functions
-# ============================================================================
-
-prompt_language_selection() {
-  local available_languages=("en" "pt" "es")
-  local lang_names=("English" "Português" "Español")
-  local piped_status=0
-
-  set +e
-  is_piped
-  piped_status=$?
-  set -e
-  if [[ ${piped_status} -eq 0 ]]; then
-    echo "en"
-    return
-  fi
-
-  echo "" >&2
-  echo -e "${CYAN}Select statusline language:${NC}" >&2
-  echo "" >&2
-  for i in "${!available_languages[@]}"; do
-    echo "  $((i + 1))) ${lang_names[i]} (${available_languages[i]})" >&2
   done
-  echo "" >&2
-  printf "Enter selection [1]: " >&2
-  read -r selection < /dev/tty || selection=""
-  selection="${selection:-1}"
 
-  local selected_index=$((selection - 1))
-  if [[ "${selected_index}" -ge 0 ]] && [[ "${selected_index}" -lt "${#available_languages[@]}" ]]; then
-    echo "${available_languages[${selected_index}]}"
+  if [[ -z "${INSTALL_DIR}" ]]; then
+    INSTALL_DIR="${HOME}/.claude"
+    # shellcheck disable=SC2088  # Keep ~ literal so the command remains shell-safe for homes with spaces.
+    SETTINGS_COMMAND='~/.claude/statusline'
   else
-    echo "en"
+    SETTINGS_COMMAND="${INSTALL_DIR}/statusline"
   fi
-}
-
-prompt_component_selection() {
-  local piped_status=0
-
-  set +e
-  is_piped
-  piped_status=$?
-  set -e
-  if [[ ${piped_status} -eq 0 ]]; then
-    echo "messages cost rainbow-wave"
-    return
-  fi
-
-  echo "" >&2
-  echo -e "${CYAN}Select features:${NC}" >&2
-  echo "" >&2
-  echo "  1) All features (messages + cost + rainbow-wave)" >&2
-  echo "  2) Messages + Cost" >&2
-  echo "  3) Messages + Rainbow Wave" >&2
-  echo "  4) Messages only" >&2
-  echo "  5) Cost only" >&2
-  echo "  6) Rainbow Wave only" >&2
-  echo "  7) Minimal (no messages, no cost, no rainbow-wave)" >&2
-  echo "" >&2
-  printf "Enter selection [1]: " >&2
-  read -r selection < /dev/tty || selection=""
-  selection="${selection:-1}"
-
-  case "${selection}" in
-    1) echo "messages cost rainbow-wave" ;;
-    2) echo "messages cost" ;;
-    3) echo "messages rainbow-wave" ;;
-    4) echo "messages" ;;
-    5) echo "cost" ;;
-    6) echo "rainbow-wave" ;;
-    7) echo "" ;;
-    *) echo "messages cost rainbow-wave" ;;
-  esac
 }
 
 # ============================================================================
 # Installation Functions
 # ============================================================================
 
-install_statusline() {
-  local source="$1"
-  local backup=""
-
-  if [[ ! -d "${TARGET_DIR}" ]]; then
-    mkdir -p "${TARGET_DIR}" || { error "Failed to create ${TARGET_DIR}"; return 1; }
+write_statusline_toml() {
+  local path="$1"
+  if [[ ! -f "${path}" ]]; then
+    "${INSTALL_DIR}/statusline" --print-defaults > "${path}" || {
+      error "Failed to generate ${path}"
+      return 1
+    }
   fi
+}
 
-  if [[ -L "${TARGET_DIR}" ]]; then
-    error "${TARGET_DIR} is a symbolic link (security risk)"
+install_rust_statusline() {
+  local os_tag
+  case "$(uname -s)" in
+    Darwin) os_tag="macos" ;;
+    Linux)  os_tag="linux-x64" ;;
+    *)
+      error "Unsupported OS: only macOS and Linux are supported."
+      return 1
+      ;;
+  esac
+
+  local tag
+  tag=$(curl -fsSL "https://api.github.com/repos/glauberlima/claude-code-statusline/releases/latest" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+
+  if [[ -z "${tag}" ]]; then
+    error "Could not determine latest release tag."
     return 1
   fi
 
-  if [[ -e "${TARGET_FILE}" ]] || [[ -L "${TARGET_FILE}" ]]; then
-    backup="${TARGET_FILE}.backup.$(generate_timestamp)"
-    mv "${TARGET_FILE}" "${backup}" || { error "Failed to backup existing installation"; return 1; }
-    info "Backed up existing: ${backup}"
-  fi
+  local url="https://github.com/glauberlima/claude-code-statusline/releases/download/${tag}/statusline-${os_tag}"
+  local binary="${INSTALL_DIR}/statusline"
 
-  cp "${source}" "${TARGET_FILE}" || {
-    error "Failed to copy file"
-    [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
+  echo ""
+  info "Downloading statusline ${tag} for ${os_tag}..."
+  mkdir -p "${INSTALL_DIR}"
+  set +e
+  download_file "${url}" "${binary}"
+  local status=$?
+  set -e
+  [[ ${status} -eq 0 ]] || return 1
+
+  chmod +x "${binary}" || {
+    error "Failed to make binary executable"
     return 1
   }
 
-  chmod +x "${TARGET_FILE}" || {
-    error "Failed to make file executable"
-    [[ -n "${backup}" ]] && mv "${backup}" "${TARGET_FILE}"
+  write_statusline_toml "${INSTALL_DIR}/statusline.toml"
+
+  success "Installed to ${binary}"
+  return 0
+}
+
+install_dev_statusline() {
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local cargo_manifest="${repo_root}/Cargo.toml"
+
+  if [[ ! -f "${cargo_manifest}" ]]; then
+    error "Cargo.toml not found. Run --dev from the repo root."
+    return 1
+  fi
+
+  info "Building debug binary..."
+  cargo build --manifest-path "${cargo_manifest}" || {
+    error "cargo build failed"
     return 1
   }
+
+  local debug_bin="${repo_root}/target/debug/statusline"
+  local binary="${INSTALL_DIR}/statusline"
+  mkdir -p "${INSTALL_DIR}"
+  cp "${debug_bin}" "${binary}" || {
+    error "Failed to copy binary to ${binary}"
+    return 1
+  }
+  chmod +x "${binary}"
+
+  write_statusline_toml "${INSTALL_DIR}/statusline.toml"
+
+  success "Dev binary installed to ${binary}"
   return 0
 }
 
@@ -540,7 +348,7 @@ configure_settings() {
     return 1
   fi
 
-  backup_file="${SETTINGS_FILE}.backup.$(generate_timestamp)"
+  backup_file="${SETTINGS_FILE}.backup.$(date +%s 2>/dev/null || echo $$)"
   cp "${SETTINGS_FILE}" "${backup_file}" || { error "Failed to backup settings.json"; return 1; }
   info "Backed up settings: ${backup_file}"
 
@@ -578,64 +386,35 @@ NODEEOF
 # ============================================================================
 
 main() {
-  local selected_language="en"
-  local selected_components="messages cost rainbow-wave"
-  local total_steps=5
-  local current_step=0
   local status=0
+
+  parse_args "$@"
 
   trap cleanup_on_error ERR INT TERM
 
   print_header
 
-  # Step 1: Check Dependencies
+  # --dev: fast local build + install, skip download and settings.json
+  if [[ "${INSTALL_DEV_MODE}" == "true" ]]; then
+    set +e; install_dev_statusline; status=$?; set -e
+    [[ ${status} -eq 0 ]] || cleanup_on_error
+    print_footer
+    exit 0
+  fi
+
+  local total_steps=3
+  local current_step=0
+
   step_with_progress "$((++current_step))" "${total_steps}" "Checking dependencies..."
-  set +e
-  check_dependencies
-  status=$?
-  set -e
+  set +e; check_dependencies; status=$?; set -e
   [[ ${status} -eq 0 ]] || exit 1
 
-  # Step 2: Acquire Files
-  step_with_progress "$((++current_step))" "${total_steps}" "Acquiring files..."
-  set +e
-  acquire_files
-  status=$?
-  set -e
+  step_with_progress "$((++current_step))" "${total_steps}" "Installing Rust binary..."
+  set +e; install_rust_statusline; status=$?; set -e
   [[ ${status} -eq 0 ]] || cleanup_on_error
 
-  # Step 3: Select Preferences
-  step_with_progress "$((++current_step))" "${total_steps}" "Configuring preferences..."
-  selected_components=$(prompt_component_selection)
-
-  # Only ask language if messages are enabled (language only affects context messages)
-  if [[ "${selected_components}" == *"messages"* ]]; then
-    selected_language=$(prompt_language_selection)
-  fi
-  success "Language: ${selected_language}, Components: ${selected_components:-none}"
-
-  # Step 4: Apply Patches
-  step_with_progress "$((++current_step))" "${total_steps}" "Applying patches..."
-  set +e
-  apply_patches "${WORKING_DIR}" "${selected_language}" "${selected_components}"
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
-  success "Patched successfully"
-
-  # Step 5: Install & Configure
-  step_with_progress "$((++current_step))" "${total_steps}" "Installing to ~/.claude..."
-  set +e
-  install_statusline "${WORKING_DIR}/statusline.sh"
-  status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
-  success "Installed to ${TARGET_FILE}"
-
-  set +e
-  configure_settings
-  status=$?
-  set -e
+  step_with_progress "$((++current_step))" "${total_steps}" "Configuring Claude Code..."
+  set +e; configure_settings; status=$?; set -e
   if [[ ${status} -ne 0 ]]; then
     warn "Installation succeeded, but automatic configuration failed"
     echo ""
@@ -648,13 +427,10 @@ main() {
     echo '     }'
     echo '   }'
     echo ""
-    cleanup_temp
     exit "${EXIT_PARTIAL_FAILURE}"
   fi
 
-  cleanup_temp
-
-  print_footer "${INSTALL_MODE}" "${selected_language}" "${selected_components}"
+  print_footer
   exit 0
 }
 

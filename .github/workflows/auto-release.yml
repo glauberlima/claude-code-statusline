@@ -1,0 +1,94 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    # Infinite-loop guard: skip if this push is the release commit itself
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v4
+        id: cliff-cache
+        with:
+          path: ~/.cargo/bin/git-cliff
+          key: git-cliff-2.13.1-${{ runner.os }}
+
+      - name: Install git-cliff
+        if: steps.cliff-cache.outputs.cache-hit != 'true'
+        run: cargo install git-cliff --version 2.13.1 --locked
+
+      - name: Compute next version
+        id: version
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
+          LOG_RANGE="${LAST_TAG:+${LAST_TAG}..}HEAD"
+
+          BUMP=$(git log "$LOG_RANGE" --pretty=format:"%s%n%b" | awk '
+            BEGIN { bump = 0 }
+            /^(feat|fix|refactor)(\([^)]*\))?!:/ { if (bump < 3) bump = 3 }
+            /^BREAKING CHANGE:/           { if (bump < 3) bump = 3 }
+            /^feat:/                      { if (bump < 2) bump = 2 }
+            /^(fix|perf|refactor|docs|chore|style):/ { if (bump < 1) bump = 1 }
+            END {
+              if (bump == 0) print "skip"
+              else if (bump == 1) print "patch"
+              else if (bump == 2) print "minor"
+              else print "major"
+            }
+          ')
+
+          echo "Detected bump: $BUMP"
+
+          if [ "$BUMP" = "skip" ]; then
+            echo "next_version=skip" >> "$GITHUB_OUTPUT"
+          else
+            BASE="${LAST_TAG:-v0.0.0}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${BASE#v}"
+            case "$BUMP" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEXT="${MAJOR}.${MINOR}.${PATCH}"
+            echo "Next version: $NEXT"
+            echo "next_version=$NEXT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update CHANGELOG.md
+        if: steps.version.outputs.next_version != 'skip'
+        env:
+          NEXT: ${{ steps.version.outputs.next_version }}
+        run: git cliff --tag "v$NEXT" --prepend CHANGELOG.md
+
+      - name: Bump Cargo.toml version
+        if: steps.version.outputs.next_version != 'skip'
+        env:
+          NEXT: ${{ steps.version.outputs.next_version }}
+        run: |
+          sed -i "s/^version = \".*\"/version = \"$NEXT\"/" Cargo.toml
+
+      - name: Commit, tag, and push
+        if: steps.version.outputs.next_version != 'skip'
+        env:
+          NEXT: ${{ steps.version.outputs.next_version }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md Cargo.toml Cargo.lock
+          git commit -m "chore(release): v$NEXT"
+          git tag -a "v$NEXT" -m "v$NEXT"
+          git push origin main --follow-tags
+
+      - name: No release needed
+        if: steps.version.outputs.next_version == 'skip'
+        run: echo "No releasable commits since last tag. Skipping release."

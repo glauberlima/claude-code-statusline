@@ -1,27 +1,18 @@
-# IDE and Development Tools
-.serena/
+# Rust build artifacts
+/target
+
+# IDE and editor
 .vscode/
 .idea/
-*.sublime-*
+.serena/
 
-# Editor Backup Files
-*~
-*.swp
-*.swo
-*.bak
-
-# Operating System Files
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
-ehthumbs.db
 
-# Temporary and Runtime Files
-*.log
-*.tmp
-tmp/
-temp/
-*.pid
-
-# Claude Code Local Configuration
+# Local config
 .claude/settings.local.json
+.envrc
+
+# Local docs (plans, specs)
+docs/
