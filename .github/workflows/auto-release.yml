@@ -3,6 +3,10 @@ name: Auto Release
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   workflow_dispatch:
 
 jobs:
