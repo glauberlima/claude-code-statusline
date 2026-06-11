@@ -10,7 +10,7 @@ jobs:
     name: Build macOS universal
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
         uses: dtolnay/rust-toolchain@master
         with:
@@ -26,7 +26,7 @@ jobs:
             target/x86_64-apple-darwin/release/statusline \
             target/aarch64-apple-darwin/release/statusline \
             -output statusline-macos
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: statusline-macos
           path: statusline-macos
@@ -35,7 +35,7 @@ jobs:
     name: Build Linux x64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
         uses: dtolnay/rust-toolchain@master
         with:
@@ -44,7 +44,7 @@ jobs:
         run: cargo build --release
       - name: Copy artifact
         run: cp target/release/statusline statusline-linux-x64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: statusline-linux-x64
           path: statusline-linux-x64
@@ -53,7 +53,7 @@ jobs:
     name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
         uses: dtolnay/rust-toolchain@master
         with:
@@ -63,7 +63,7 @@ jobs:
       - name: Copy artifact
         run: copy target\release\statusline.exe statusline-windows-x64.exe
         shell: cmd
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: statusline-windows-x64
           path: statusline-windows-x64.exe
@@ -75,9 +75,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             statusline-macos/statusline-macos
