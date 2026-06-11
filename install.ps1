@@ -9,7 +9,7 @@
 
 .EXAMPLE
     # Remote (PowerShell pipe install)
-    iex (irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1)
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1)))
 
     # Local (from repo directory)
     .\install.ps1
