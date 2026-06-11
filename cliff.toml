@@ -5,12 +5,18 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 
-{% for commit in commits %}
-- {{ commit.message }}
+{% for commit in commits %}\
+- {{ commit.message | split(pat=" (") | first }}\
+{% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}](https://github.com/glauberlima/claude-code-statusline/pull/{{ commit.remote.pr_number }})){% endif %} \
+— [@{{ commit.remote.username | default(value=commit.author.name) }}](https://github.com/{{ commit.remote.username | default(value=commit.author.name) }})
 {% endfor %}
 {% endfor %}
 """
 trim = true
+
+[remote.github]
+owner = "glauberlima"
+repo  = "claude-code-statusline"
 
 [git]
 conventional_commits = true

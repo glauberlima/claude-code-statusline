@@ -75,10 +75,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
+      - name: Extract release notes
+        id: notes
+        run: |
+          BODY=$(awk '/^## /{if(found)exit; found=1; next} found{print}' CHANGELOG.md)
+          echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
+          body: ${{ steps.notes.outputs.body }}
           files: |
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
