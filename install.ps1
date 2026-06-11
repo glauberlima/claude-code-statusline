@@ -33,7 +33,7 @@ $ErrorActionPreference = 'Stop'
 $TargetDir          = $InstallDir
 $TargetFile         = Join-Path $InstallDir 'statusline.exe'
 # settings.json always lives in the default Claude config dir, regardless of $InstallDir
-$SettingsFile       = Join-Path $HOME '.claude' 'settings.json'
+$SettingsFile       = Join-Path (Join-Path $HOME '.claude') 'settings.json'
 $TomlFile           = Join-Path $InstallDir 'statusline.toml'
 $GithubApi          = 'https://api.github.com/repos/glauberlima/claude-code-statusline/releases/latest'
 $GithubBaseUrl      = 'https://github.com/glauberlima/claude-code-statusline/releases/download'
