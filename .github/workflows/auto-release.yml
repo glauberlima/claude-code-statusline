@@ -69,7 +69,9 @@ jobs:
         if: steps.version.outputs.next_version != 'skip'
         env:
           NEXT: ${{ steps.version.outputs.next_version }}
-        run: git cliff --tag "v$NEXT" --unreleased --prepend CHANGELOG.md
+        run: |
+          touch CHANGELOG.md
+          git cliff --tag "v$NEXT" --unreleased --prepend CHANGELOG.md
 
       - name: Bump Cargo.toml version
         if: steps.version.outputs.next_version != 'skip'
