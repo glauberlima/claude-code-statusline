@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Installer for Claude Code Statusline (Windows)
@@ -42,7 +42,7 @@ $MaxDownloadRetries = 3
 # Use tilde path for the default location (Claude Code resolves ~ natively);
 # use the absolute path when a custom install dir is specified.
 $defaultClaudeDir   = Join-Path $HOME '.claude'
-$StatusLineCommand  = if ($InstallDir -eq $defaultClaudeDir) { '~/.claude/statusline' } else { Join-Path $InstallDir 'statusline' }
+$StatusLineCommand  = if ($InstallDir -eq $defaultClaudeDir) { '~/.claude/statusline.exe' } else { Join-Path $InstallDir 'statusline.exe' }
 
 # ============================================================================
 # UI Functions
