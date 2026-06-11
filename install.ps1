@@ -9,7 +9,7 @@
 
 .EXAMPLE
     # Remote (PowerShell pipe install)
-    irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1 | iex
+    iex (irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1)
 
     # Local (from repo directory)
     .\install.ps1

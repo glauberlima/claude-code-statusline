@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 **Windows — PowerShell**
 ```powershell
-irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1 | iex
+iex (irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)
 ```
 
 **Windows — CMD**
