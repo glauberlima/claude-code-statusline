@@ -7,6 +7,9 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'install.sh'
+      - 'install.ps1'
+      - 'install.cmd'
   workflow_dispatch:
 
 jobs:
