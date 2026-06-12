@@ -76,7 +76,31 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v5
+        id: cliff-cache
+        with:
+          path: ~/.cargo/bin/git-cliff
+          key: git-cliff-2.13.1-${{ runner.os }}
+
+      - name: Install git-cliff
+        if: steps.cliff-cache.outputs.cache-hit != 'true'
+        run: cargo install git-cliff --version 2.13.1 --locked
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(git cliff --unreleased --ignore-tags ".*-dev\..*" --strip all 2>/dev/null)
+          echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v8
+
       - name: Create prerelease
         uses: softprops/action-gh-release@v3
         with:
@@ -84,7 +108,7 @@ jobs:
           body: |
             > ⚠️ **Unstable release** — for testing only. Do not use in production.
 
-            Tag: ${{ github.ref_name }}
+            ${{ steps.changelog.outputs.body }}
           files: |
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
