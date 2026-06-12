@@ -97,10 +97,15 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md Cargo.toml Cargo.lock
+          sed -i "s|/claude-code-statusline/main/install|/claude-code-statusline/v$NEXT/install|g" README.md
+          git add CHANGELOG.md Cargo.toml Cargo.lock README.md
           git commit -m "chore(release): v$NEXT"
           git tag -a "v$NEXT" -m "v$NEXT"
           git push origin main --follow-tags
+          sed -i "s|/claude-code-statusline/v$NEXT/install|/claude-code-statusline/main/install|g" README.md
+          git add README.md
+          git commit -m "chore: restore README install URLs to /main/ after v$NEXT release"
+          git push origin main
 
       - name: No release needed
         if: steps.version.outputs.next_version == 'skip'
