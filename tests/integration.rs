@@ -56,3 +56,33 @@ fn contains_directory_icon() {
     let out = run_statusline(json);
     assert!(out.contains("📁"), "missing dir icon in: {out}");
 }
+
+#[test]
+fn configure_settings_creates_and_merges() {
+    let dir = std::env::temp_dir()
+        .join(format!("statusline-cfg-itest-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let settings = dir.join("settings.json");
+    std::fs::write(&settings, r#"{"other":"value"}"#).unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_statusline");
+    let out = std::process::Command::new(bin)
+        .args([
+            "--configure-settings",
+            settings.to_str().unwrap(),
+            "~/.claude/statusline",
+        ])
+        .output()
+        .expect("failed to run statusline");
+
+    assert_eq!(out.status.code(), Some(0), "non-zero exit: {:?}", out.stderr);
+
+    let content = std::fs::read_to_string(&settings).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&content).unwrap();
+    assert_eq!(v["other"], "value", "existing key must be preserved");
+    assert_eq!(v["statusLine"]["type"], "command");
+    assert_eq!(v["statusLine"]["command"], "~/.claude/statusline");
+    assert_eq!(v["statusLine"]["padding"], 0);
+
+    std::fs::remove_dir_all(dir).ok();
+}

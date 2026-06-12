@@ -1,5 +1,6 @@
 mod components;
 mod config;
+mod configure;
 mod git;
 mod input;
 mod render;
@@ -14,6 +15,22 @@ fn main() -> anyhow::Result<()> {
 
     if std::env::args().any(|a| a == "--version") {
         println!("statusline {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pos) = args.iter().position(|a| a == "--configure-settings") {
+        let settings_path = args.get(pos + 1).ok_or_else(|| {
+            anyhow::anyhow!(
+                "statusline: --configure-settings requires two arguments: <settings_json_path> <command_path>"
+            )
+        })?;
+        let command_path = args.get(pos + 2).ok_or_else(|| {
+            anyhow::anyhow!(
+                "statusline: --configure-settings requires two arguments: <settings_json_path> <command_path>"
+            )
+        })?;
+        configure::run(settings_path, command_path)?;
         return Ok(());
     }
 

@@ -37,31 +37,19 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)))
 ```
 
-**Windows — CMD**
-```cmd
-curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.cmd -o install.cmd && install.cmd && del install.cmd
-```
-
 ### Custom install directory
 
 Override where the binary and config are installed (default: `~/.claude`):
 
 ```bash
-# bash/zsh
+# macOS / Linux / WSL
 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --install-dir /custom/path
 ```
 
 ```powershell
-# PowerShell
+# Windows — PowerShell
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\custom"
 ```
-
-```cmd
-:: CMD
-install.cmd --install-dir C:\custom
-```
-
-> **Note:** When using a custom install directory, you must manually update `~/.claude/settings.json` to point to the new binary location.
 
 ## 📥 Direct Downloads
 
@@ -73,7 +61,7 @@ Pre-built binaries are published with every release. These URLs always point to 
 | Linux x64 | [`statusline-linux-x64`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-linux-x64) |
 | Windows x64 | [`statusline-windows-x64.exe`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-windows-x64.exe) |
 
-The install scripts above use these URLs automatically. For local development, use `--dev` to build from source with `cargo build`.
+The install scripts above use these URLs automatically.
 
 ## Features
 

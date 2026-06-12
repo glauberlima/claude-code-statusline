@@ -2,382 +2,228 @@
 <#
 .SYNOPSIS
     Installer for Claude Code Statusline (Windows)
-
 .DESCRIPTION
-    Downloads the latest Rust binary from GitHub releases and configures
-    Claude Code settings.json.
-
+    Downloads the latest statusline binary and configures Claude Code.
 .EXAMPLE
-    # Remote (PowerShell pipe install)
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1)))
-
-    # Local (from repo directory)
-    .\install.ps1
-
-    # Local dev build (from repo directory)
-    .\install.ps1 -Dev
+.EXAMPLE
+    .\install.ps1 -InstallDir C:\custom\path
 #>
-
 param(
-    [string]$InstallDir = (Join-Path $HOME '.claude'),
-    [switch]$Dev
+    [string]$InstallDir = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ============================================================================
-# Configuration
-# ============================================================================
+$GithubRepo    = "glauberlima/claude-code-statusline"
+$GithubApi     = "https://api.github.com/repos/$GithubRepo/releases/latest"
+$GithubDlBase  = "https://github.com/$GithubRepo/releases/download"
+$MaxRetries    = 3
 
-$TargetDir          = $InstallDir
-$TargetFile         = Join-Path $InstallDir 'statusline.exe'
-# settings.json always lives in the default Claude config dir, regardless of $InstallDir
-$SettingsFile       = Join-Path (Join-Path $HOME '.claude') 'settings.json'
-$TomlFile           = Join-Path $InstallDir 'statusline.toml'
-$GithubApi          = 'https://api.github.com/repos/glauberlima/claude-code-statusline/releases/latest'
-$GithubBaseUrl      = 'https://github.com/glauberlima/claude-code-statusline/releases/download'
-$MaxDownloadRetries = 3
-
-# Use tilde path for the default location (Claude Code resolves ~ natively);
-# use the absolute path when a custom install dir is specified.
-$defaultClaudeDir   = Join-Path $HOME '.claude'
-$StatusLineCommand  = if ($InstallDir -eq $defaultClaudeDir) { '~/.claude/statusline.exe' } else { Join-Path $InstallDir 'statusline.exe' }
-
-# ============================================================================
-# UI Functions
-# ============================================================================
-
-function Write-Header {
-    Write-Host ''
-    Write-Host '╔══════════════════════════════════════════════════╗'
-    Write-Host '║        Claude Code Statusline - Installer        ║'
-    Write-Host '╚══════════════════════════════════════════════════╝'
-    Write-Host ''
+# ── Derived paths ──────────────────────────────────────────────────────────────
+if ([string]::IsNullOrEmpty($InstallDir)) {
+    $InstallDir = Join-Path $HOME ".claude"
 }
 
-function Write-Footer {
-    Write-Host ''
-    Write-Host '╔══════════════════════════════════════════════════╗'
-    Write-Host '║              Installation Complete!              ║'
-    Write-Host '╚══════════════════════════════════════════════════╝'
-    Write-Host ''
+$TargetFile   = Join-Path $InstallDir "statusline.exe"
+$SettingsFile = Join-Path $HOME ".claude\settings.json"
+$TomlFile     = Join-Path $InstallDir "statusline.toml"
+
+$DefaultInstallDir = Join-Path $HOME ".claude"
+if ($InstallDir -eq $DefaultInstallDir) {
+    $CommandPath = "~/.claude/statusline.exe"
+} else {
+    $CommandPath = $TargetFile
+}
+
+# ── Output helpers ─────────────────────────────────────────────────────────────
+function Write-Success([string]$Msg) {
+    Write-Host -NoNewline -ForegroundColor Green "✓"
+    Write-Host " $Msg"
+}
+function Write-Info([string]$Msg) {
+    Write-Host -NoNewline -ForegroundColor Cyan "→"
+    Write-Host " $Msg"
+}
+function Write-Warn([string]$Msg) {
+    Write-Host -NoNewline -ForegroundColor Yellow "⚠" -ErrorAction SilentlyContinue
+    [Console]::Error.WriteLine("  $Msg")
+}
+function Write-Err([string]$Msg) {
+    Write-Host -NoNewline -ForegroundColor Red "✗" -ErrorAction SilentlyContinue
+    [Console]::Error.WriteLine(" $Msg")
+}
+function Write-Step([int]$N, [string]$Msg) {
+    Write-Host ""
+    Write-Host -NoNewline -ForegroundColor Cyan "[$N/3]"
+    Write-Host " $Msg"
+}
+
+# ── Header / footer ────────────────────────────────────────────────────────────
+function Print-Header {
+    Write-Host ""
+    Write-Host "╔══════════════════════════════════════════════════╗"
+    Write-Host "║        Claude Code Statusline - Installer        ║"
+    Write-Host "╚══════════════════════════════════════════════════╝"
+    Write-Host ""
+}
+
+function Print-Footer {
+    Write-Host ""
+    Write-Host "╔══════════════════════════════════════════════════╗"
+    Write-Host "║              Installation Complete!              ║"
+    Write-Host "╚══════════════════════════════════════════════════╝"
+    Write-Host ""
     Write-Host "Installed: $TargetFile"
-    Write-Host ''
-    Write-Host -NoNewline 'Next step: '
-    Write-Host -ForegroundColor Cyan 'Restart Claude Code to see your new statusline'
-    Write-Host ''
-    Write-Host 'To update, run the installation command again.'
+    Write-Host ""
+    Write-Host -NoNewline "Next step: "
+    Write-Host -ForegroundColor Cyan "Restart Claude Code to see your new statusline"
+    Write-Host ""
+    Write-Host "To update, run the installation command again."
     Write-Host "To customize, edit $TomlFile"
-    Write-Host ''
+    Write-Host ""
 }
 
-function Write-Step {
-    param([int]$Current, [int]$Total, [string]$Message)
-    Write-Host ''
-    Write-Host -NoNewline -ForegroundColor Cyan "[$Current/$Total] "
-    Write-Host $Message
+# ── Download with retries ──────────────────────────────────────────────────────
+function Download-WithRetries([string]$Url, [string]$Dest) {
+    $attempt = 1
+    while ($attempt -le $MaxRetries) {
+        try {
+            $prev = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
+            $ProgressPreference = $prev
+            return $true
+        } catch {
+            $ProgressPreference = $prev
+            $attempt++
+            if ($attempt -le $MaxRetries) { Start-Sleep -Seconds 1 }
+        }
+    }
+    return $false
 }
 
-function Write-Success { param([string]$Message); Write-Host -ForegroundColor Green "✓ $Message" }
-function Write-Warn    { param([string]$Message); Write-Host -ForegroundColor Yellow "⚠  $Message" }
-function Write-Err     { param([string]$Message); Write-Host -ForegroundColor Red "✗ $Message" }
-function Write-Info    { param([string]$Message); Write-Host -ForegroundColor Cyan "→ $Message" }
+# ── Main ───────────────────────────────────────────────────────────────────────
+Print-Header
 
-# ============================================================================
-# Utility Functions
-# ============================================================================
+# [1/3] Check dependencies
+Write-Step 1 "Checking dependencies..."
 
-function Get-Timestamp {
-    return [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$Missing = @()
+foreach ($dep in @("claude")) {
+    if (-not (Get-Command $dep -ErrorAction SilentlyContinue)) {
+        $Missing += $dep
+    }
 }
 
-function Invoke-Cleanup {
-    # No temp dir in this installer — placeholder for error handler symmetry
-}
-
-function Invoke-CleanupOnError {
-    Invoke-Cleanup
-    Write-Host ''
-    Write-Err 'Installation failed. No changes made.'
+if ($Missing.Count -gt 0) {
+    Write-Err "Missing dependencies: $($Missing -join ', ')"
+    Write-Host ""
+    if ($Missing -contains "claude") {
+        Write-Host -NoNewline -ForegroundColor Cyan "Claude Code CLI:"
+        Write-Host ""
+        Write-Host "  Visit https://claude.ai/code for installation instructions"
+        Write-Host ""
+    }
+    Write-Host "Installation aborted. Install dependencies and try again."
     exit 1
 }
 
-# ============================================================================
-# Validation Functions
-# ============================================================================
-
-function Get-ToolVersion {
-    param([string]$Tool)
-    try {
-        $out = & $Tool --version 2>$null | Select-Object -First 1
-        if ($out -match '([\d.]+)') { return $Matches[1] }
-        return 'found'
-    } catch {
-        return 'found'
-    }
+foreach ($dep in @("claude")) {
+    $ver = & $dep --version 2>$null | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "found" }
+    Write-Success "$dep $ver"
 }
 
-function Test-Dependencies {
-    $missing = @()
+# [2/3] Install binary
+Write-Step 2 "Installing binary..."
 
-    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { $missing += 'claude' }
-    if (-not (Get-Command node   -ErrorAction SilentlyContinue)) { $missing += 'node' }
-
-    if ($missing.Count -gt 0) {
-        Show-InstallInstructions $missing
-        return $false
-    }
-
-    Write-Success "claude $(Get-ToolVersion claude)"
-    Write-Success "node   $(Get-ToolVersion node)"
-    return $true
+$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
+    Write-Err "Unsupported architecture: $arch. Only x64 is supported."
+    exit 1
 }
 
-function Show-InstallInstructions {
-    param([string[]]$Missing)
-    Write-Err "Missing dependencies: $($Missing -join ', ')"
-    Write-Host ''
+$Asset = "statusline-windows-x64.exe"
 
-    if ($Missing -contains 'claude') {
-        Write-Host -ForegroundColor Cyan 'Claude Code CLI:'
-        Write-Host '  Visit https://claude.ai/code for installation instructions'
-        Write-Host ''
-    }
-
-    if ($Missing -contains 'node') {
-        Write-Host -ForegroundColor Cyan 'Node.js:'
-        Write-Host '  https://nodejs.org/'
-        Write-Host '  winget install --id OpenJS.NodeJS'
-        Write-Host ''
-    }
-
-    Write-Host 'Installation aborted. Install dependencies and try again.'
-}
-
-# ============================================================================
-# Download Functions
-# ============================================================================
-
-function Invoke-DownloadFile {
-    param([string]$Url, [string]$Dest)
-
-    $ProgressPreference = 'SilentlyContinue'
-    for ($attempt = 1; $attempt -le $MaxDownloadRetries; $attempt++) {
-        try {
-            Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing -ErrorAction Stop
-            break
-        } catch {
-            if ($attempt -ge $MaxDownloadRetries) {
-                $ProgressPreference = 'Continue'
-                Write-Err "Failed to download from $Url"
-                Write-Info 'Check your internet connection and try again'
-                return $false
-            }
-            Start-Sleep -Seconds 1
-        }
-    }
+$ProgressPreference = 'SilentlyContinue'
+try {
+    $Release = Invoke-RestMethod -Uri $GithubApi -UseBasicParsing
+} catch {
+    Write-Err "Could not determine latest release tag."
+    exit 1
+} finally {
     $ProgressPreference = 'Continue'
-
-    if (-not (Test-Path $Dest) -or (Get-Item $Dest).Length -eq 0) {
-        Write-Err 'Downloaded file is empty'
-        return $false
-    }
-    return $true
 }
 
-function Install-Binary {
-    # Detect architecture — only x64 supported
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
-        Write-Err "Unsupported architecture: $arch. Only x64 is supported."
-        return $false
-    }
+$Tag = $Release.tag_name
+if ([string]::IsNullOrEmpty($Tag)) {
+    Write-Err "Could not determine latest release tag."
+    exit 1
+}
 
-    # Get latest release tag
-    Write-Info 'Fetching latest release...'
-    $ProgressPreference = 'SilentlyContinue'
+Write-Info "Downloading statusline $Tag for $Asset..."
+
+if (-not (Test-Path $InstallDir)) {
     try {
-        $release = Invoke-RestMethod -Uri $GithubApi -UseBasicParsing -ErrorAction Stop
-        $tag = $release.tag_name
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     } catch {
-        Write-Err 'Could not fetch latest release from GitHub'
-        return $false
-    } finally {
-        $ProgressPreference = 'Continue'
+        Write-Err "Cannot create install directory: $InstallDir"
+        exit 1
     }
+}
 
-    if ([string]::IsNullOrWhiteSpace($tag)) {
-        Write-Err 'Could not determine latest release tag'
-        return $false
-    }
+$DownloadUrl = "$GithubDlBase/$Tag/$Asset"
+if (-not (Download-WithRetries $DownloadUrl $TargetFile)) {
+    Write-Err "Failed to download from $DownloadUrl"
+    Write-Info "Check your internet connection and try again"
+    exit 1
+}
 
-    $url = "$GithubBaseUrl/$tag/statusline-windows-x64.exe"
-    Write-Info "Downloading statusline $tag for windows-x64..."
+if (-not (Test-Path $TargetFile) -or (Get-Item $TargetFile).Length -eq 0) {
+    Write-Err "Downloaded file is empty"
+    exit 1
+}
 
-    if (-not (Test-Path $TargetDir)) {
-        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-    }
-
-    if (-not (Invoke-DownloadFile $url $TargetFile)) {
-        return $false
-    }
-
-    Write-Success "Binary installed to $TargetFile"
-
-    # Write statusline.toml defaults (skip if already exists)
-    if (-not (Test-Path $TomlFile)) {
-        $tomlContent = & $TargetFile '--print-defaults' 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tomlContent)) {
-            Write-Err "Failed to generate $TomlFile"
-            return $false
-        }
-        Set-Content -Path $TomlFile -Value $tomlContent -Encoding UTF8
+if (Test-Path $TomlFile) {
+    Write-Info "Config already exists, skipping: $TomlFile"
+} else {
+    try {
+        & $TargetFile --print-defaults | Set-Content -Path $TomlFile -Encoding UTF8
         Write-Success "Created default config: $TomlFile"
-    } else {
-        Write-Info "Config already exists, skipping: $TomlFile"
+    } catch {
+        Write-Err "Failed to generate $TomlFile"
+        exit 1
     }
-
-    return $true
 }
 
-function Install-DevBinary {
-    $repoRoot = $PSScriptRoot
-    $cargoManifest = Join-Path $repoRoot 'Cargo.toml'
+Write-Success "Binary installed to $TargetFile"
 
-    if (-not (Test-Path $cargoManifest)) {
-        Write-Err 'Cargo.toml not found. Run -Dev from the repo root.'
-        return $false
-    }
+# [3/3] Configure Claude Code
+Write-Step 3 "Configuring Claude Code..."
 
-    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-        Write-Err 'cargo not found. Install Rust from https://rustup.rs'
-        return $false
-    }
-
-    Write-Info 'Building debug binary...'
-    & cargo build --manifest-path $cargoManifest
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err 'cargo build failed'
-        return $false
-    }
-
-    $debugBin = Join-Path $repoRoot 'target\debug\statusline.exe'
-    if (-not (Test-Path $debugBin)) {
-        Write-Err "Built binary not found at $debugBin"
-        return $false
-    }
-
-    if (-not (Test-Path $TargetDir)) {
-        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-    }
-
-    Copy-Item $debugBin $TargetFile -Force
-    Write-Success "Dev binary installed to $TargetFile"
-
-    if (-not (Test-Path $TomlFile)) {
-        $tomlContent = & $TargetFile '--print-defaults' 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tomlContent)) {
-            Write-Err "Failed to generate $TomlFile"
-            return $false
-        }
-        Set-Content -Path $TomlFile -Value $tomlContent -Encoding UTF8
-        Write-Success "Created default config: $TomlFile"
-    } else {
-        Write-Info "Config already exists, skipping: $TomlFile"
-    }
-
-    return $true
+$cfgExit = 0
+try {
+    & $TargetFile --configure-settings $SettingsFile $CommandPath
+    $cfgExit = $LASTEXITCODE
+} catch {
+    $cfgExit = 1
 }
 
-# ============================================================================
-# Settings Functions
-# ============================================================================
-
-function Set-ClaudeSettings {
-    if (-not (Test-Path $SettingsFile)) {
-        Set-Content -Path $SettingsFile -Value '{}' -Encoding UTF8
-        Write-Info 'Created new settings.json'
-    }
-
-    # Validate existing JSON
-    & node -e "try{JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.exit(0)}catch(e){process.exit(1)}" $SettingsFile 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err 'Existing settings.json contains invalid JSON'
-        Write-Info "Please fix $SettingsFile manually"
-        return $false
-    }
-
-    $backup = "$SettingsFile.backup.$(Get-Timestamp)"
-    Copy-Item $SettingsFile $backup -ErrorAction Stop
-    Write-Info "Backed up settings: $backup"
-
-    $tempFile = [System.IO.Path]::GetTempFileName()
-
-    $nodeScript = @"
-var fs = require('fs');
-var src  = process.argv[1];
-var cmd  = process.argv[2];
-var dest = process.argv[3];
-var settings = JSON.parse(fs.readFileSync(src, 'utf8'));
-settings.statusLine = { type: 'command', command: cmd, padding: 0 };
-fs.writeFileSync(dest, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-"@
-    & node -e $nodeScript $SettingsFile $StatusLineCommand $tempFile 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err 'Failed to update configuration'
-        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-        return $false
-    }
-
-    Move-Item $tempFile $SettingsFile -Force
-    Write-Success 'Configured ~/.claude/settings.json'
-    return $true
+if ($cfgExit -ne 0) {
+    Write-Warn "Installation succeeded, but automatic configuration failed"
+    Write-Host ""
+    Write-Host "Please manually add to ~/.claude/settings.json:"
+    Write-Host '   {'
+    Write-Host '     "statusLine": {'
+    Write-Host '       "type": "command",'
+    Write-Host "       `"command`": `"$CommandPath`","
+    Write-Host '       "padding": 0'
+    Write-Host '     }'
+    Write-Host '   }'
+    Write-Host ""
+    exit 2
 }
 
-# ============================================================================
-# Main
-# ============================================================================
-
-function Main {
-    Write-Header
-
-    if ($Dev) {
-        if (-not (Install-DevBinary)) { Invoke-CleanupOnError }
-        Write-Footer
-        exit 0
-    }
-
-    $totalSteps  = 3
-    $currentStep = 0
-
-    $currentStep++
-    Write-Step $currentStep $totalSteps 'Checking dependencies...'
-    if (-not (Test-Dependencies)) { exit 1 }
-
-    $currentStep++
-    Write-Step $currentStep $totalSteps 'Downloading Rust binary...'
-    if (-not (Install-Binary)) { Invoke-CleanupOnError }
-
-    $currentStep++
-    Write-Step $currentStep $totalSteps 'Configuring Claude Code...'
-    if (-not (Set-ClaudeSettings)) {
-        Write-Warn 'Installation succeeded, but automatic configuration failed'
-        Write-Host ''
-        Write-Host 'Please manually add to ~/.claude/settings.json:'
-        Write-Host '   {'
-        Write-Host '     "statusLine": {'
-        Write-Host '       "type": "command",'
-        Write-Host "       `"command`": `"$StatusLineCommand`","
-        Write-Host '       "padding": 0'
-        Write-Host '     }'
-        Write-Host '   }'
-        Write-Host ''
-        exit 2
-    }
-
-    Write-Footer
-    exit 0
-}
-
-Main
+Print-Footer

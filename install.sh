@@ -1,437 +1,238 @@
 #!/usr/bin/env bash
-# install.sh - Installer for statusline (Rust binary)
-# Downloads the latest release binary and configures Claude Code.
-
 set -euo pipefail
 
-# ============================================================================
-# Configuration
-# ============================================================================
-readonly SETTINGS_FILE="${HOME}/.claude/settings.json"
-readonly EXIT_PARTIAL_FAILURE=2
-SETTINGS_COMMAND=''  # set by parse_args after INSTALL_DIR is resolved
-readonly MAX_DOWNLOAD_RETRIES=3
+GITHUB_REPO="glauberlima/claude-code-statusline"
+GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+GITHUB_DL_BASE="https://github.com/${GITHUB_REPO}/releases/download"
+MAX_RETRIES=3
 
-# ANSI color codes
-readonly SUCCESS='\033[0;32m'  # Green
-readonly WARN='\033[0;33m'     # Yellow
-readonly ERROR='\033[0;31m'    # Red
-readonly CYAN='\033[0;36m'     # Cyan
-readonly MUTED='\033[0;90m'    # Gray
-readonly NC='\033[0m'          # No Color
+# ── Colors ─────────────────────────────────────────────────────────────────────
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+MUTED='\033[0;90m'
+NC='\033[0m'
 
-# Unicode symbols
-readonly CHECK_MARK="✓"
-readonly CROSS_MARK="✗"
-readonly WARNING_SIGN="⚠️"
-readonly ARROW="→"
+# ── Output helpers ─────────────────────────────────────────────────────────────
+success() { echo -e "${GREEN}✓${NC} $*"; }
+info()    { echo -e "${CYAN}→${NC} $*"; }
+warn()    { echo -e "${YELLOW}⚠${NC}  $*" >&2; }
+error()   { echo -e "${RED}✗${NC} $*" >&2; }
+muted()   { echo -e "${MUTED}  $*${NC}"; }
+step()    { echo -e "\n${CYAN}[$1/3]${NC} $2"; }
 
-# Install configuration (set by parse_args or defaults)
-INSTALL_DEV_MODE=false
-INSTALL_DIR=""           # install directory (defaults to ~/.claude)
+# ── Argument parsing ───────────────────────────────────────────────────────────
+INSTALL_DIR="${HOME}/.claude"
 
-# ============================================================================
-# Utility Functions
-# ============================================================================
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --install-dir)
+            if [[ -z "${2:-}" ]]; then
+                error "--install-dir requires an argument."
+                exit 1
+            fi
+            INSTALL_DIR="$2"
+            shift 2
+            ;;
+        *) shift ;;
+    esac
+done
 
-is_wsl() {
-  [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
-}
+BINARY_DEST="${INSTALL_DIR}/statusline"
+SETTINGS_FILE="${HOME}/.claude/settings.json"
+TOML_FILE="${INSTALL_DIR}/statusline.toml"
 
+if [[ "${INSTALL_DIR}" == "${HOME}/.claude" ]]; then
+    COMMAND_PATH="~/.claude/statusline"
+else
+    COMMAND_PATH="${BINARY_DEST}"
+fi
 
-cleanup_on_error() {
-  echo ""
-  error "Installation failed. No changes made."
-  exit 1
-}
-
-validate_json() {
-  node -e "JSON.parse(require('fs').readFileSync(process.argv[process.argv.length-1],'utf8'))" \
-       "$1" 2>/dev/null
-}
-
-# ============================================================================
-# UI Functions
-# ============================================================================
-
+# ── Header / footer ────────────────────────────────────────────────────────────
 print_header() {
-  echo ""
-  echo "╔══════════════════════════════════════════════════╗"
-  echo "║        Claude Code Statusline - Installer        ║"
-  echo "╚══════════════════════════════════════════════════╝"
-  echo ""
+    echo ""
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║        Claude Code Statusline - Installer        ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo ""
 }
 
 print_footer() {
-  echo ""
-  echo "╔══════════════════════════════════════════════════╗"
-  echo "║              Installation Complete!              ║"
-  echo "╚══════════════════════════════════════════════════╝"
-  echo ""
-  echo "Installed: ${INSTALL_DIR}/statusline"
-  echo ""
-  echo -e "${CYAN}Next step:${NC} Restart Claude Code to see your new statusline"
-  echo ""
-  echo "To update, run the installation command again."
-  echo "To customize, edit ${INSTALL_DIR}/statusline.toml"
-  echo ""
+    echo ""
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║              Installation Complete!              ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo ""
+    echo "Installed: ${BINARY_DEST}"
+    echo ""
+    echo -e "Next step: ${CYAN}Restart Claude Code to see your new statusline${NC}"
+    echo ""
+    echo "To update, run the installation command again."
+    echo "To customize, edit ${TOML_FILE}"
+    echo ""
 }
 
-step_with_progress() {
-  local current="$1"
-  local total="$2"
-  local message="$3"
-  echo ""
-  echo -e "${CYAN}[${current}/${total}]${NC} ${message}"
+# ── Trap ───────────────────────────────────────────────────────────────────────
+cleanup_on_error() {
+    echo ""
+    error "Installation failed. No changes made."
+    exit 1
 }
 
-success() { echo -e "${SUCCESS}${CHECK_MARK}${NC} $1"; }
-warn()    { echo -e "${WARN}${WARNING_SIGN}${NC}  $1" >&2; }
-error()   { echo -e "${ERROR}${CROSS_MARK}${NC} $1" >&2; }
-info()    { echo -e "${CYAN}${ARROW}${NC} $1"; }
-muted()   { echo -e "${MUTED}$1${NC}"; }
-
-# ============================================================================
-# Validation Functions
-# ============================================================================
-
-extract_version() {
-  local cmd="$1"
-  "${cmd}" --version 2>/dev/null | grep -oE '[0-9.]+' | head -n1 || echo 'found'
+# ── WSL detection ──────────────────────────────────────────────────────────────
+is_wsl() {
+    [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
-check_dependencies() {
-  local missing=()
+# ── Dep version helper ─────────────────────────────────────────────────────────
+dep_version() {
+    "$1" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || echo "found"
+}
 
-  command -v claude >/dev/null 2>&1 || missing+=("claude")
-  command -v curl   >/dev/null 2>&1 || missing+=("curl")
-  command -v node   >/dev/null 2>&1 || missing+=("node")
+# ── Download with retries ──────────────────────────────────────────────────────
+download_with_retries() {
+    local url="$1"
+    local dest="$2"
+    local attempt=1
 
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    show_install_instructions "${missing[@]}"
+    while [[ ${attempt} -le ${MAX_RETRIES} ]]; do
+        if curl -fsSL --output "${dest}" "${url}" 2>/dev/null; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        [[ ${attempt} -le ${MAX_RETRIES} ]] && sleep 1
+    done
     return 1
-  fi
-
-  local v_curl v_claude v_node
-  v_curl=$(extract_version curl)
-  v_claude=$(extract_version claude)
-  v_node=$(extract_version node)
-  success "curl ${v_curl}"
-  success "claude ${v_claude}"
-  success "node ${v_node}"
-
-  local wsl_status=0
-  set +e; is_wsl; wsl_status=$?; set -e
-  [[ ${wsl_status} -eq 0 ]] && muted "  Detected: WSL environment"
-
-  return 0
 }
 
-show_install_instructions() {
-  local deps=("$@")
-  local platform
-  platform=$(uname -s 2>/dev/null)
-  [[ -n "${platform}" ]] || platform="Unknown"
+# ── Main ───────────────────────────────────────────────────────────────────────
+print_header
+trap cleanup_on_error ERR INT TERM
 
-  error "Missing dependencies: ${deps[*]}"
-  echo ""
+# [1/3] Check dependencies
+step 1 "Checking dependencies..."
 
-  for dep in "${deps[@]}"; do
-    if [[ "${dep}" == "claude" ]]; then
-      echo -e "${CYAN}Claude Code CLI:${NC}"
-      echo "  Visit https://claude.ai/code for installation instructions"
-      echo ""
-      break
+missing_deps=()
+for dep in claude curl; do
+    if ! command -v "${dep}" &>/dev/null; then
+        missing_deps+=("${dep}")
     fi
-  done
+done
 
-  case "${platform}" in
-    Darwin)
-      echo -e "${CYAN}Install on macOS:${NC}"
-      echo "  brew install curl node"
-      ;;
-    Linux)
-      local wsl_status=0
-      set +e
-      is_wsl
-      wsl_status=$?
-      set -e
-      if [[ ${wsl_status} -eq 0 ]]; then
-        echo -e "${CYAN}Install on WSL:${NC}"
-      else
-        echo -e "${CYAN}Install on Linux:${NC}"
-      fi
-      if command -v apt-get >/dev/null 2>&1; then
-        echo "  sudo apt-get update && sudo apt-get install curl nodejs"
-      elif command -v yum >/dev/null 2>&1; then
-        echo "  sudo yum install curl nodejs"
-      elif command -v dnf >/dev/null 2>&1; then
-        echo "  sudo dnf install curl nodejs"
-      else
-        echo "  Use your package manager to install: curl node"
-      fi
-      ;;
-    *)
-      echo -e "${CYAN}Please install the following dependencies:${NC}"
-      echo "  - curl, node"
-      ;;
-  esac
+if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    error "Missing dependencies: ${missing_deps[*]}"
+    echo ""
 
-  echo ""
-  echo "Installation aborted. Install dependencies and try again."
-}
-
-download_file() {
-  local url="$1"
-  local dest="$2"
-  local attempt=1
-
-  while [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]]; do
-    if curl -fsSL "${url}" -o "${dest}" 2>/dev/null; then
-      break
+    if [[ " ${missing_deps[*]} " == *" claude "* ]]; then
+        echo -e "${CYAN}Claude Code CLI:${NC}"
+        echo "  Visit https://claude.ai/code for installation instructions"
+        echo ""
     fi
-    attempt=$((attempt + 1))
-    [[ ${attempt} -le ${MAX_DOWNLOAD_RETRIES} ]] && sleep 1
-  done
 
-  if [[ ${attempt} -gt ${MAX_DOWNLOAD_RETRIES} ]]; then
-    error "Failed to download from ${url}"
-    echo "  ${ARROW} Check your internet connection and try again" >&2
-    return 1
-  fi
+    if [[ " ${missing_deps[*]} " == *" curl "* ]]; then
+        OS_NAME="$(uname -s)"
+        echo -e "${CYAN}curl:${NC}"
+        if [[ "${OS_NAME}" == "Darwin" ]]; then
+            echo "  brew install curl"
+        elif command -v apt-get &>/dev/null; then
+            echo "  sudo apt-get update && sudo apt-get install curl"
+        elif command -v dnf &>/dev/null; then
+            echo "  sudo dnf install curl"
+        elif command -v yum &>/dev/null; then
+            echo "  sudo yum install curl"
+        fi
+        echo ""
+    fi
 
-  if [[ ! -s "${dest}" ]]; then
-    error "Downloaded file is empty"
-    return 1
-  fi
-  return 0
-}
+    echo "Installation aborted. Install dependencies and try again."
+    exit 1
+fi
 
-# ============================================================================
-# Argument Parsing
-# ============================================================================
+for dep in claude curl; do
+    success "${dep} $(dep_version "${dep}")"
+done
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --dev)
-        INSTALL_DEV_MODE=true
-        shift
-        ;;
-      --install-dir)
-        [[ -n "${2:-}" ]] || { error "--install-dir requires an argument"; exit 1; }
-        INSTALL_DIR="$2"
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
+if is_wsl; then
+    muted "Detected: WSL environment"
+fi
 
-  if [[ -z "${INSTALL_DIR}" ]]; then
-    INSTALL_DIR="${HOME}/.claude"
-    # shellcheck disable=SC2088  # Keep ~ literal so the command remains shell-safe for homes with spaces.
-    SETTINGS_COMMAND='~/.claude/statusline'
-  else
-    SETTINGS_COMMAND="${INSTALL_DIR}/statusline"
-  fi
-}
+# [2/3] Install binary
+step 2 "Installing binary..."
 
-# ============================================================================
-# Installation Functions
-# ============================================================================
-
-write_statusline_toml() {
-  local path="$1"
-  if [[ ! -f "${path}" ]]; then
-    "${INSTALL_DIR}/statusline" --print-defaults > "${path}" || {
-      error "Failed to generate ${path}"
-      return 1
-    }
-  fi
-}
-
-install_rust_statusline() {
-  local os_tag
-  case "$(uname -s)" in
-    Darwin) os_tag="macos" ;;
-    Linux)  os_tag="linux-x64" ;;
+OS="$(uname -s)"
+case "${OS}" in
+    Darwin) ASSET="statusline-macos" ;;
+    Linux)  ASSET="statusline-linux-x64" ;;
     *)
-      error "Unsupported OS: only macOS and Linux are supported."
-      return 1
-      ;;
-  esac
+        error "Unsupported OS: only macOS and Linux are supported."
+        exit 1
+        ;;
+esac
 
-  local tag
-  tag=$(curl -fsSL "https://api.github.com/repos/glauberlima/claude-code-statusline/releases/latest" \
-    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')
-
-  if [[ -z "${tag}" ]]; then
+TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
+if [[ -z "${TAG}" ]]; then
     error "Could not determine latest release tag."
-    return 1
-  fi
+    exit 1
+fi
 
-  local url="https://github.com/glauberlima/claude-code-statusline/releases/download/${tag}/statusline-${os_tag}"
-  local binary="${INSTALL_DIR}/statusline"
+info "Downloading statusline ${TAG} for ${ASSET}..."
 
-  echo ""
-  info "Downloading statusline ${tag} for ${os_tag}..."
-  mkdir -p "${INSTALL_DIR}"
-  set +e
-  download_file "${url}" "${binary}"
-  local status=$?
-  set -e
-  [[ ${status} -eq 0 ]] || return 1
+if ! mkdir -p "${INSTALL_DIR}" 2>/dev/null; then
+    error "Cannot create install directory: ${INSTALL_DIR}"
+    exit 1
+fi
 
-  chmod +x "${binary}" || {
+DOWNLOAD_URL="${GITHUB_DL_BASE}/${TAG}/${ASSET}"
+if ! download_with_retries "${DOWNLOAD_URL}" "${BINARY_DEST}"; then
+    error "Failed to download from ${DOWNLOAD_URL}"
+    info "Check your internet connection and try again"
+    exit 1
+fi
+
+if [[ ! -s "${BINARY_DEST}" ]]; then
+    error "Downloaded file is empty"
+    exit 1
+fi
+
+if ! chmod +x "${BINARY_DEST}"; then
     error "Failed to make binary executable"
-    return 1
-  }
+    exit 1
+fi
 
-  write_statusline_toml "${INSTALL_DIR}/statusline.toml"
+if [[ -f "${TOML_FILE}" ]]; then
+    info "Config already exists, skipping: ${TOML_FILE}"
+else
+    if ! "${BINARY_DEST}" --print-defaults > "${TOML_FILE}"; then
+        error "Failed to generate ${TOML_FILE}"
+        exit 1
+    fi
+    success "Created default config: ${TOML_FILE}"
+fi
 
-  success "Installed to ${binary}"
-  return 0
-}
+success "Binary installed to ${BINARY_DEST}"
 
-install_dev_statusline() {
-  local repo_root
-  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local cargo_manifest="${repo_root}/Cargo.toml"
+# [3/3] Configure Claude Code
+step 3 "Configuring Claude Code..."
 
-  if [[ ! -f "${cargo_manifest}" ]]; then
-    error "Cargo.toml not found. Run --dev from the repo root."
-    return 1
-  fi
+set +e
+"${BINARY_DEST}" --configure-settings "${SETTINGS_FILE}" "${COMMAND_PATH}"
+CFG_EXIT=$?
+set -e
 
-  info "Building debug binary..."
-  cargo build --manifest-path "${cargo_manifest}" || {
-    error "cargo build failed"
-    return 1
-  }
-
-  local debug_bin="${repo_root}/target/debug/statusline"
-  local binary="${INSTALL_DIR}/statusline"
-  mkdir -p "${INSTALL_DIR}"
-  cp "${debug_bin}" "${binary}" || {
-    error "Failed to copy binary to ${binary}"
-    return 1
-  }
-  chmod +x "${binary}"
-
-  write_statusline_toml "${INSTALL_DIR}/statusline.toml"
-
-  success "Dev binary installed to ${binary}"
-  return 0
-}
-
-configure_settings() {
-  local settings_dir="${HOME}/.claude"
-  local temp_file backup_file
-
-  mkdir -p "${settings_dir}" || { error "Cannot create ${settings_dir}"; return 1; }
-
-  if [[ ! -f "${SETTINGS_FILE}" ]]; then
-    echo "{}" > "${SETTINGS_FILE}" || { error "Cannot create ${SETTINGS_FILE}"; return 1; }
-    info "Created new settings.json"
-  fi
-
-  local status=0
-  set +e
-  validate_json "${SETTINGS_FILE}"
-  status=$?
-  set -e
-  if [[ ${status} -ne 0 ]]; then
-    error "Existing settings.json contains invalid JSON"
-    echo "  ${ARROW} Please fix ${SETTINGS_FILE} manually" >&2
-    return 1
-  fi
-
-  backup_file="${SETTINGS_FILE}.backup.$(date +%s 2>/dev/null || echo $$)"
-  cp "${SETTINGS_FILE}" "${backup_file}" || { error "Failed to backup settings.json"; return 1; }
-  info "Backed up settings: ${backup_file}"
-
-  temp_file=$(mktemp) || { error "Cannot create temporary file"; return 1; }
-
-  # Use node to merge statusLine into settings.json, preserving all other keys.
-  # Path and command passed via process.argv to avoid shell injection risks.
-  node - "${SETTINGS_FILE}" "${SETTINGS_COMMAND}" "${temp_file}" 2>/dev/null <<'NODEEOF' || {
-    var fs = require('fs');
-    var src  = process.argv[process.argv.length - 3];
-    var cmd  = process.argv[process.argv.length - 2];
-    var dest = process.argv[process.argv.length - 1];
-    var settings = JSON.parse(fs.readFileSync(src, 'utf8'));
-    settings.statusLine = { type: 'command', command: cmd, padding: 0 };
-    fs.writeFileSync(dest, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-NODEEOF
-    error "Failed to update configuration"
-    rm -f "${temp_file}"
-    return 1
-  }
-
-  mv "${temp_file}" "${SETTINGS_FILE}" || {
-    error "Failed to write settings.json"
-    mv "${backup_file}" "${SETTINGS_FILE}"
-    rm -f "${temp_file}"
-    return 1
-  }
-
-  success "Configured ~/.claude/settings.json"
-  return 0
-}
-
-# ============================================================================
-# Main Installation Flow
-# ============================================================================
-
-main() {
-  local status=0
-
-  parse_args "$@"
-
-  trap cleanup_on_error ERR INT TERM
-
-  print_header
-
-  # --dev: fast local build + install, skip download and settings.json
-  if [[ "${INSTALL_DEV_MODE}" == "true" ]]; then
-    set +e; install_dev_statusline; status=$?; set -e
-    [[ ${status} -eq 0 ]] || cleanup_on_error
-    print_footer
-    exit 0
-  fi
-
-  local total_steps=3
-  local current_step=0
-
-  step_with_progress "$((++current_step))" "${total_steps}" "Checking dependencies..."
-  set +e; check_dependencies; status=$?; set -e
-  [[ ${status} -eq 0 ]] || exit 1
-
-  step_with_progress "$((++current_step))" "${total_steps}" "Installing Rust binary..."
-  set +e; install_rust_statusline; status=$?; set -e
-  [[ ${status} -eq 0 ]] || cleanup_on_error
-
-  step_with_progress "$((++current_step))" "${total_steps}" "Configuring Claude Code..."
-  set +e; configure_settings; status=$?; set -e
-  if [[ ${status} -ne 0 ]]; then
+if [[ ${CFG_EXIT} -ne 0 ]]; then
     warn "Installation succeeded, but automatic configuration failed"
     echo ""
     echo "Please manually add to ~/.claude/settings.json:"
-    echo '   {'
-    echo '     "statusLine": {'
-    echo '       "type": "command",'
-    echo "       \"command\": \"${SETTINGS_COMMAND}\","
-    echo '       "padding": 0'
-    echo '     }'
-    echo '   }'
+    echo "   {"
+    echo "     \"statusLine\": {"
+    echo "       \"type\": \"command\","
+    echo "       \"command\": \"${COMMAND_PATH}\","
+    echo "       \"padding\": 0"
+    echo "     }"
+    echo "   }"
     echo ""
-    exit "${EXIT_PARTIAL_FAILURE}"
-  fi
+    exit 2
+fi
 
-  print_footer
-  exit 0
-}
-
-main "$@"
+print_footer
