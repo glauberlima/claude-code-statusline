@@ -94,7 +94,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BODY=$(git cliff --tag "$GITHUB_REF_NAME" --unreleased --ignore-tags ".*-dev\..*" --strip all 2>&1 || true)
+          LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
+          RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
+          BODY=$(git cliff --tag "$GITHUB_REF_NAME" "$RANGE" --ignore-tags ".*-dev\..*" --strip all 2>&1 || true)
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
           echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
