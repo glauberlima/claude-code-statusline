@@ -108,7 +108,7 @@ jobs:
           sed -i "s/^SCRIPT_VERSION=\"v$NEXT\"/SCRIPT_VERSION=\"latest\"/" install.sh
           sed -i "s/^\$ScriptVersion = \"v$NEXT\"/\$ScriptVersion = \"latest\"/" install.ps1
           git add README.md install.sh install.ps1
-          git commit -m "chore: restore install scripts to /main/ after v$NEXT release"
+          git commit -m "chore: restore README and install scripts after v$NEXT release"
           git push origin main
 
       - name: No release needed
