@@ -89,7 +89,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 # cost = true               # show cost tracker [true|false]
 # messages = false          # show context messages [true|false]
 # messages_language = "en"  # message language ["en"|"pt"|"es"]
-# usage_bar_style = "plain" # progress bar style ["plain"|"rainbow"]
+# usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"]
 ```
 
 All fields are optional. Shown values are defaults.

@@ -32,6 +32,7 @@ pub enum BarStyle {
     #[default]
     Plain,
     Rainbow,
+    Gradient,
 }
 
 impl<'de> Deserialize<'de> for BarStyle {
@@ -40,6 +41,7 @@ impl<'de> Deserialize<'de> for BarStyle {
         match s.as_str() {
             "plain" => Ok(BarStyle::Plain),
             "rainbow" => Ok(BarStyle::Rainbow),
+            "gradient" => Ok(BarStyle::Gradient),
             other => {
                 eprintln!("statusline: unknown usage_bar_style \"{other}\", using \"plain\"");
                 Ok(BarStyle::Plain)
@@ -101,7 +103,7 @@ pub fn print_defaults() -> String {
         "# cost = true               # show cost tracker [true|false]",
         "# messages = false          # show context messages [true|false]",
         "# messages_language = \"en\"  # message language [\"en\"|\"pt\"|\"es\"]",
-        "# usage_bar_style = \"plain\" # progress bar style [\"plain\"|\"rainbow\"]",
+        "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"]",
     ]
     .join("\n")
         + "\n"
@@ -596,7 +598,7 @@ usage_bar_style = "rainbow"
         assert!(out.contains("messages_language = \"en\""));
         assert!(out.contains("usage_bar_style = \"plain\""));
         assert!(out.contains("[true|false]"));
-        assert!(out.contains("[\"plain\"|\"rainbow\"]"));
+        assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"]"));
     }
 
     #[test]

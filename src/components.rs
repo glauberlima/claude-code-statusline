@@ -2,8 +2,8 @@ use crate::config::{BarStyle, Config, ContextTier, get_messages};
 use crate::git::{GitInfo, GitState};
 use crate::input::ClaudeInput;
 use crate::render::{
-    BAR_EMPTY, BAR_FILLED, BAR_WIDTH, BLUE, CYAN, GRAY, GREEN, MAGENTA, NC, ORANGE, RED,
-    WAVE_COLORS,
+    BAR_EMPTY, BAR_FILLED, BAR_WIDTH, BLUE, CYAN, GRADIENT_COLORS, GRAY, GREEN, MAGENTA, NC,
+    ORANGE, RED, WAVE_COLORS,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -68,7 +68,7 @@ pub fn build_files(changed: u32) -> String {
 
 pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64) -> String {
     let pct = input.context_percent.clamp(0, 100);
-    let bar = build_usage_bar(pct, matches!(config.usage_bar_style, BarStyle::Rainbow), wave_time);
+    let bar = build_usage_bar(pct, config.usage_bar_style, wave_time);
     let usage = format_number(input.current_usage);
     let size = format_number(input.context_size);
 
@@ -95,41 +95,73 @@ pub fn build_cost(cost_usd: f64, config: &Config) -> String {
     format!("💰 {GREEN}${cost_usd:.2}{NC}")
 }
 
-pub fn build_usage_bar(percent: u8, rainbow: bool, wave_time: u64) -> String {
+fn fill_plain(filled: usize, percent: u8) -> String {
+    if filled == 0 {
+        return String::new();
+    }
+    let tier = ContextTier::from_percent(percent);
+    let color = match tier {
+        ContextTier::VeryLow => GREEN,
+        ContextTier::Low => CYAN,
+        ContextTier::Medium | ContextTier::High => ORANGE,
+        ContextTier::Critical => RED,
+    };
+    let mut s = color.to_string();
+    for _ in 0..filled {
+        s.push_str(BAR_FILLED);
+    }
+    s.push_str(NC);
+    s
+}
+
+fn fill_rainbow(filled: usize, wave_time: u64) -> String {
+    if filled == 0 {
+        return String::new();
+    }
+    let phase = (wave_time as usize) % WAVE_COLORS.len();
+    let mut s = String::new();
+    for i in 0..filled {
+        let idx = (i + phase) % WAVE_COLORS.len();
+        s.push_str(&format!("\x1b[38;5;{}m{BAR_FILLED}", WAVE_COLORS[idx]));
+    }
+    s.push_str(NC);
+    s
+}
+
+fn fill_gradient(filled: usize) -> String {
+    if filled == 0 {
+        return String::new();
+    }
+    let mut s = String::new();
+    for i in 0..filled {
+        let idx = if BAR_WIDTH > 1 {
+            i * (GRADIENT_COLORS.len() - 1) / (BAR_WIDTH - 1)
+        } else {
+            0
+        };
+        s.push_str(&format!("\x1b[38;5;{}m{BAR_FILLED}", GRADIENT_COLORS[idx]));
+    }
+    s.push_str(NC);
+    s
+}
+
+pub fn build_usage_bar(percent: u8, style: BarStyle, wave_time: u64) -> String {
     let pct = percent.clamp(0, 100) as usize;
     let filled = pct * BAR_WIDTH / 100;
     let empty = BAR_WIDTH - filled;
 
-    let mut bar = String::new();
+    let colored = match style {
+        BarStyle::Plain => fill_plain(filled, percent),
+        BarStyle::Rainbow => fill_rainbow(filled, wave_time),
+        BarStyle::Gradient => fill_gradient(filled),
+    };
 
-    if rainbow && filled > 0 {
-        let phase = (wave_time as usize) % WAVE_COLORS.len();
-        for i in 0..filled {
-            let idx = (i + phase) % WAVE_COLORS.len();
-            bar.push_str(&format!("\x1b[38;5;{}m{BAR_FILLED}", WAVE_COLORS[idx]));
-        }
-        bar.push_str(NC);
-    } else if filled > 0 {
-        let tier = ContextTier::from_percent(percent);
-        let color = match tier {
-            ContextTier::VeryLow => GREEN,
-            ContextTier::Low => CYAN,
-            ContextTier::Medium | ContextTier::High => ORANGE,
-            ContextTier::Critical => RED,
-        };
-        bar.push_str(color);
-        for _ in 0..filled {
-            bar.push_str(BAR_FILLED);
-        }
-        bar.push_str(NC);
-    }
-
+    let mut bar = colored;
     bar.push_str(GRAY);
     for _ in 0..empty {
         bar.push_str(BAR_EMPTY);
     }
     bar.push_str(NC);
-
     bar
 }
 
@@ -191,22 +223,51 @@ mod tests {
 
     #[test]
     fn progress_bar_at_0() {
-        let bar = build_usage_bar(0, false, 0);
+        let bar = build_usage_bar(0, BarStyle::Plain, 0);
         assert_eq!(bar.chars().filter(|&c| c == '░').count(), 15);
         assert!(!bar.contains('█'));
     }
 
     #[test]
     fn progress_bar_at_100() {
-        let bar = build_usage_bar(100, false, 0);
+        let bar = build_usage_bar(100, BarStyle::Plain, 0);
         assert!(bar.contains('█'));
     }
 
     #[test]
     fn progress_bar_at_50_has_mixed_chars() {
-        let bar = build_usage_bar(50, false, 0);
+        let bar = build_usage_bar(50, BarStyle::Plain, 0);
         assert!(bar.contains('█'));
         assert!(bar.contains('░'));
+    }
+
+    #[test]
+    fn gradient_bar_empty() {
+        let bar = build_usage_bar(0, BarStyle::Gradient, 0);
+        assert!(!bar.contains('█'));
+        assert_eq!(bar.chars().filter(|&c| c == '░').count(), 15);
+        // no gradient color codes when empty
+        assert!(!bar.contains("\x1b[38;5;"));
+    }
+
+    #[test]
+    fn gradient_bar_full_starts_green_ends_red() {
+        let bar = build_usage_bar(100, BarStyle::Gradient, 0);
+        assert!(bar.contains('█'));
+        // first color code must be GRADIENT_COLORS[0] = 46 (green)
+        assert!(bar.contains("\x1b[38;5;46m"), "first char must be green (46)");
+        // last filled color code must be GRADIENT_COLORS[10] = 196 (red)
+        assert!(bar.contains("\x1b[38;5;196m"), "last char must be red (196)");
+    }
+
+    #[test]
+    fn gradient_bar_half_no_red() {
+        // 50% fill = 7 chars; index reaches GRADIENT_COLORS[4]=190 at most (halfway through palette)
+        let bar = build_usage_bar(50, BarStyle::Gradient, 0);
+        assert!(bar.contains('█'));
+        assert!(bar.contains('░'));
+        // 196 is the last red — should not appear at 50%
+        assert!(!bar.contains("\x1b[38;5;196m"), "red (196) must not appear at 50%");
     }
 
     #[test]

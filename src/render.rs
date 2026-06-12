@@ -14,6 +14,9 @@ pub const BAR_WIDTH: usize = 15;
 // 256-color rainbow palette indices (matches bash WAVE_COLORS)
 pub const WAVE_COLORS: &[u8] = &[196, 208, 220, 226, 118, 46, 48, 51, 33, 21, 93, 201];
 
+// 256-color gradient: green → yellow → orange → red (positional, left=low usage, right=high)
+pub const GRADIENT_COLORS: &[u8] = &[46, 82, 118, 154, 190, 226, 220, 214, 208, 202, 196];
+
 pub fn separator() -> String {
     format!(" {GRAY}|{NC} ")
 }
