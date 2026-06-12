@@ -3,7 +3,7 @@ name: Publish Unstable Release
 on:
   push:
     tags:
-      - 'v*-dev.*'
+      - 'v*-alpha.*'
 
 jobs:
   build-macos:
