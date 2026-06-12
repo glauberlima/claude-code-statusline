@@ -20,6 +20,7 @@ $GithubRepo    = "glauberlima/claude-code-statusline"
 $GithubApi     = "https://api.github.com/repos/$GithubRepo/releases/latest"
 $GithubDlBase  = "https://github.com/$GithubRepo/releases/download"
 $MaxRetries    = 3
+$ScriptVersion = "latest"          # patched to tag name by CI at release time
 
 # ── Derived paths ──────────────────────────────────────────────────────────────
 if ([string]::IsNullOrEmpty($InstallDir)) {
@@ -147,20 +148,23 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 
 $Asset = "statusline-windows-x64.exe"
 
-$ProgressPreference = 'SilentlyContinue'
-try {
-    $Release = Invoke-RestMethod -Uri $GithubApi -UseBasicParsing
-} catch {
-    Write-Err "Could not determine latest release tag."
-    exit 1
-} finally {
-    $ProgressPreference = 'Continue'
-}
-
-$Tag = $Release.tag_name
-if ([string]::IsNullOrEmpty($Tag)) {
-    Write-Err "Could not determine latest release tag."
-    exit 1
+if ($ScriptVersion -eq "latest") {
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        $Release = Invoke-RestMethod -Uri $GithubApi -UseBasicParsing
+    } catch {
+        Write-Err "Could not determine latest release tag."
+        exit 1
+    } finally {
+        $ProgressPreference = 'Continue'
+    }
+    $Tag = $Release.tag_name
+    if ([string]::IsNullOrEmpty($Tag)) {
+        Write-Err "Could not determine latest release tag."
+        exit 1
+    }
+} else {
+    $Tag = $ScriptVersion
 }
 
 Write-Info "Downloading statusline $Tag for $Asset..."
