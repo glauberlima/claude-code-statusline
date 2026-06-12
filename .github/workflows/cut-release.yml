@@ -1,21 +1,10 @@
-name: Auto Release
+name: Cut Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'install.sh'
-      - 'install.ps1'
-      - 'install.cmd'
   workflow_dispatch:
 
 jobs:
   release:
-    # Infinite-loop guard: skip if this push is the release commit itself
-    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
