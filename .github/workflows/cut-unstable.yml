@@ -24,7 +24,7 @@ jobs:
       - name: Compute unstable version
         id: version
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*.[0-9]*.[0-9]*" --exclude "*-alpha*" 2>/dev/null || echo "")
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*.[0-9]*.[0-9]*" --exclude "*-dev*" 2>/dev/null || echo "")
 
           LOG_RANGE="${LAST_TAG:+${LAST_TAG}..}HEAD"
 
@@ -51,7 +51,7 @@ jobs:
           esac
 
           TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
-          VERSION="${MAJOR}.${MINOR}.${PATCH}-alpha.${TIMESTAMP}"
+          VERSION="${MAJOR}.${MINOR}.${PATCH}-dev.${TIMESTAMP}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed unstable version: v$VERSION"
 
@@ -61,5 +61,5 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "alpha v$VERSION"
+          git tag -a "v$VERSION" -m "unstable v$VERSION"
           git push origin "v$VERSION"
