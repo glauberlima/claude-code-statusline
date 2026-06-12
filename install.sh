@@ -5,6 +5,7 @@ GITHUB_REPO="glauberlima/claude-code-statusline"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 GITHUB_DL_BASE="https://github.com/${GITHUB_REPO}/releases/download"
 MAX_RETRIES=3
+SCRIPT_VERSION="latest"          # patched to tag name by CI at release time
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
@@ -170,10 +171,14 @@ case "${OS}" in
         ;;
 esac
 
-TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
-if [[ -z "${TAG}" ]]; then
-    error "Could not determine latest release tag."
-    exit 1
+if [[ "${SCRIPT_VERSION}" == "latest" ]]; then
+    TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
+    if [[ -z "${TAG}" ]]; then
+        error "Could not determine latest release tag."
+        exit 1
+    fi
+else
+    TAG="${SCRIPT_VERSION}"
 fi
 
 info "Downloading statusline ${TAG} for ${ASSET}..."
