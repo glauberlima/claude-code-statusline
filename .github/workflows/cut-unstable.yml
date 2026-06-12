@@ -2,11 +2,6 @@ name: Cut Unstable Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag (e.g. 1.1.0-dev.1)'
-        required: true
-        type: string
 
 jobs:
   tag:
@@ -26,18 +21,43 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Validate version format
-        env:
-          VERSION: ${{ inputs.version }}
+      - name: Compute unstable version
+        id: version
         run: |
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$'; then
-            echo "Version must match X.Y.Z-dev.N (e.g. 1.1.0-dev.1)"
-            exit 1
-          fi
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*.[0-9]*.[0-9]*" --exclude "*-dev*" 2>/dev/null || echo "")
+
+          LOG_RANGE="${LAST_TAG:+${LAST_TAG}..}HEAD"
+
+          BUMP=$(git log "$LOG_RANGE" --pretty=format:"%s%n%b" | awk '
+            BEGIN { bump = 0 }
+            /^(feat|fix|refactor)(\([^)]*\))?!:/ { if (bump < 3) bump = 3 }
+            /^BREAKING CHANGE:/                   { if (bump < 3) bump = 3 }
+            /^feat:/                              { if (bump < 2) bump = 2 }
+            /^(fix|perf|refactor|docs|chore|style):/ { if (bump < 1) bump = 1 }
+            END {
+              if (bump == 0) print "patch"
+              else if (bump == 1) print "patch"
+              else if (bump == 2) print "minor"
+              else print "major"
+            }
+          ')
+
+          BASE="${LAST_TAG:-v0.0.0}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${BASE#v}"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+          VERSION="${MAJOR}.${MINOR}.${PATCH}-dev.${TIMESTAMP}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed unstable version: v$VERSION"
 
       - name: Tag and push
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
