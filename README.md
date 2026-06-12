@@ -98,7 +98,7 @@ Edit `~/.claude/statusline.toml` to customize features. Generate the default con
 & "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
 ```
 
-Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`).
+Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`).
 
 ## 🛠️ Development
 
