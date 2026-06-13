@@ -231,8 +231,8 @@ jobs:
         env:
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
-          sed "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh > install.sh.patched
-          sed "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1 > install.ps1.patched
+          sed -i "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh
+          sed -i "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1
 
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
@@ -278,8 +278,8 @@ jobs:
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
-            install.sh.patched:install.sh
-            install.ps1.patched:install.ps1
+            install.sh
+            install.ps1
 
       - name: Create prerelease (unstable)
         if: inputs.type == 'unstable'
@@ -295,5 +295,5 @@ jobs:
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
-            install.sh.patched:install.sh
-            install.ps1.patched:install.ps1
+            install.sh
+            install.ps1
