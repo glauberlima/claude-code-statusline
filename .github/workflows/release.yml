@@ -22,7 +22,7 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          app-id: ${{ secrets.APP_ID }}
+          client-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v6
@@ -153,7 +153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.96.0'
           targets: x86_64-apple-darwin,aarch64-apple-darwin
@@ -180,7 +180,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.96.0'
       - name: Build
@@ -200,7 +200,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.96.0'
       - name: Build
