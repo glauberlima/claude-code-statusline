@@ -234,6 +234,12 @@ jobs:
           sed -i "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh
           sed -i "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1
 
+      - name: Patch README.md download URLs with release tag
+        env:
+          TAG: ${{ needs.cut.outputs.tag }}
+        run: |
+          sed -i "s|releases/latest/download/|releases/download/${TAG}/|g" README.md
+
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
         id: notes-stable
