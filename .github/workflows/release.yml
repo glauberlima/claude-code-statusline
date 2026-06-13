@@ -123,6 +123,13 @@ jobs:
           VERSION="${TAG#v}"
           sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
+      - name: Patch README.md download URLs with release tag
+        if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          sed -i "s|releases/latest/download/|releases/download/${TAG}/|g" README.md
+
       - name: Commit, tag, and push (stable)
         if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
         env:
@@ -130,7 +137,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md Cargo.toml Cargo.lock
+          git add CHANGELOG.md Cargo.toml Cargo.lock README.md
           git commit -m "chore(release): $TAG"
           git tag -a "$TAG" -m "$TAG"
           git push origin main --follow-tags
@@ -233,12 +240,6 @@ jobs:
         run: |
           sed -i "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh
           sed -i "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1
-
-      - name: Patch README.md download URLs with release tag
-        env:
-          TAG: ${{ needs.cut.outputs.tag }}
-        run: |
-          sed -i "s|releases/latest/download/|releases/download/${TAG}/|g" README.md
 
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
