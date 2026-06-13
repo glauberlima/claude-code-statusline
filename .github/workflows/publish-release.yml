@@ -78,6 +78,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
+      - name: Patch install scripts with release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          sed "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh > install.sh.patched
+          sed "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1 > install.ps1.patched
       - name: Extract release notes
         id: notes
         run: |
@@ -93,3 +99,5 @@ jobs:
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
+            install.sh.patched:install.sh
+            install.ps1.patched:install.ps1

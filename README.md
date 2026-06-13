@@ -29,12 +29,12 @@ Install with one command. Works immediately. Configure when you need it.
 
 **macOS / Linux / WSL**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
+curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash
 ```
 
 **Windows — PowerShell**
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)))
+& ([scriptblock]::Create((irm https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1)))
 ```
 
 ### Custom install directory
@@ -43,12 +43,12 @@ Override where the binary and config are installed (default: `~/.claude`):
 
 ```bash
 # macOS / Linux / WSL
-curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --install-dir /custom/path
+curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash -s -- --install-dir /custom/path
 ```
 
 ```powershell
 # Windows — PowerShell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\custom"
+& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1'))) -InstallDir "C:\custom"
 ```
 
 ## 📥 Direct Downloads
