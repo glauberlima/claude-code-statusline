@@ -12,6 +12,7 @@ on:
 jobs:
   cut:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     outputs:
@@ -150,6 +151,7 @@ jobs:
     needs: [cut]
     if: needs.cut.outputs.skipped != 'true'
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
@@ -167,6 +169,8 @@ jobs:
             target/x86_64-apple-darwin/release/statusline \
             target/aarch64-apple-darwin/release/statusline \
             -output statusline-macos
+      - name: Smoke test
+        run: ./statusline-macos --version
       - uses: actions/upload-artifact@v7
         with:
           name: statusline-macos
@@ -177,6 +181,7 @@ jobs:
     needs: [cut]
     if: needs.cut.outputs.skipped != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
@@ -187,6 +192,8 @@ jobs:
         run: cargo build --release
       - name: Copy artifact
         run: cp target/release/statusline statusline-linux-x64
+      - name: Smoke test
+        run: ./statusline-linux-x64 --version
       - uses: actions/upload-artifact@v7
         with:
           name: statusline-linux-x64
@@ -197,6 +204,7 @@ jobs:
     needs: [cut]
     if: needs.cut.outputs.skipped != 'true'
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.96.0
@@ -208,6 +216,8 @@ jobs:
       - name: Copy artifact
         run: copy target\release\statusline.exe statusline-windows-x64.exe
         shell: cmd
+      - name: Smoke test
+        run: .\statusline-windows-x64.exe --version
       - uses: actions/upload-artifact@v7
         with:
           name: statusline-windows-x64
@@ -218,6 +228,7 @@ jobs:
     needs: [cut, build-macos, build-linux, build-windows]
     if: needs.cut.outputs.skipped != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -233,6 +244,13 @@ jobs:
         run: |
           sed -i "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh
           sed -i "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1
+
+      - name: Generate checksums
+        run: |
+          (cd statusline-macos   && sha256sum statusline-macos)           > checksums.txt
+          (cd statusline-linux-x64 && sha256sum statusline-linux-x64)    >> checksums.txt
+          (cd statusline-windows-x64 && sha256sum statusline-windows-x64.exe) >> checksums.txt
+          cat checksums.txt
 
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
@@ -280,6 +298,7 @@ jobs:
             statusline-windows-x64/statusline-windows-x64.exe
             install.sh
             install.ps1
+            checksums.txt
 
       - name: Create prerelease (unstable)
         if: inputs.type == 'unstable'
@@ -297,3 +316,4 @@ jobs:
             statusline-windows-x64/statusline-windows-x64.exe
             install.sh
             install.ps1
+            checksums.txt

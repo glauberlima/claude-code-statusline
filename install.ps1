@@ -190,6 +190,36 @@ if (-not (Test-Path $TargetFile) -or (Get-Item $TargetFile).Length -eq 0) {
     exit 1
 }
 
+Write-Info "Verifying checksum..."
+$ChecksumsUrl = "$GithubDlBase/$Tag/checksums.txt"
+$ChecksumsTmp = Join-Path $env:TEMP "statusline-checksums-$([System.IO.Path]::GetRandomFileName()).txt"
+if (-not (Download-WithRetries $ChecksumsUrl $ChecksumsTmp)) {
+    Write-Err "Failed to download checksums.txt — cannot verify binary integrity"
+    Remove-Item -Force $TargetFile -ErrorAction SilentlyContinue
+    exit 1
+}
+
+$ChecksumsContent = Get-Content $ChecksumsTmp -ErrorAction SilentlyContinue
+Remove-Item -Force $ChecksumsTmp -ErrorAction SilentlyContinue
+
+$ExpectedLine = $ChecksumsContent | Where-Object { $_ -match " $([regex]::Escape($Asset))$" } | Select-Object -First 1
+if ([string]::IsNullOrEmpty($ExpectedLine)) {
+    Write-Err "Checksum not found for $Asset in checksums.txt"
+    Remove-Item -Force $TargetFile -ErrorAction SilentlyContinue
+    exit 1
+}
+$ExpectedHash = ($ExpectedLine -split '\s+')[0].ToUpper()
+
+$ActualHash = (Get-FileHash $TargetFile -Algorithm SHA256).Hash.ToUpper()
+if ($ActualHash -ne $ExpectedHash) {
+    Write-Err "Checksum mismatch for $Asset"
+    Write-Err "  expected: $ExpectedHash"
+    Write-Err "  got:      $ActualHash"
+    Remove-Item -Force $TargetFile -ErrorAction SilentlyContinue
+    exit 1
+}
+Write-Success "Checksum verified"
+
 if (Test-Path $TomlFile) {
     Write-Info "Config already exists, skipping: $TomlFile"
 } else {

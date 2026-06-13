@@ -200,6 +200,43 @@ if [[ ! -s "${BINARY_DEST}" ]]; then
     exit 1
 fi
 
+info "Verifying checksum..."
+CHECKSUMS_URL="${GITHUB_DL_BASE}/${TAG}/checksums.txt"
+CHECKSUMS_TMP="$(mktemp)"
+if ! download_with_retries "${CHECKSUMS_URL}" "${CHECKSUMS_TMP}"; then
+    rm -f "${CHECKSUMS_TMP}"
+    error "Failed to download checksums.txt — cannot verify binary integrity"
+    rm -f "${BINARY_DEST}"
+    exit 1
+fi
+
+# Extract the expected hash for our specific asset
+EXPECTED_LINE="$(grep " ${ASSET}$" "${CHECKSUMS_TMP}" || true)"
+rm -f "${CHECKSUMS_TMP}"
+
+if [[ -z "${EXPECTED_LINE}" ]]; then
+    error "Checksum not found for ${ASSET} in checksums.txt"
+    rm -f "${BINARY_DEST}"
+    exit 1
+fi
+
+# sha256sum on Linux, shasum on macOS
+if command -v sha256sum &>/dev/null; then
+    ACTUAL_HASH="$(sha256sum "${BINARY_DEST}" | awk '{print $1}')"
+else
+    ACTUAL_HASH="$(shasum -a 256 "${BINARY_DEST}" | awk '{print $1}')"
+fi
+EXPECTED_HASH="$(echo "${EXPECTED_LINE}" | awk '{print $1}')"
+
+if [[ "${ACTUAL_HASH}" != "${EXPECTED_HASH}" ]]; then
+    error "Checksum mismatch for ${ASSET}"
+    error "  expected: ${EXPECTED_HASH}"
+    error "  got:      ${ACTUAL_HASH}"
+    rm -f "${BINARY_DEST}"
+    exit 1
+fi
+success "Checksum verified"
+
 if ! chmod +x "${BINARY_DEST}"; then
     error "Failed to make binary executable"
     exit 1
