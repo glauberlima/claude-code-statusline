@@ -57,7 +57,7 @@ jobs:
             BEGIN { bump = 0 }
             /^(feat|fix|refactor)(\([^)]*\))?!:/ { if (bump < 3) bump = 3 }
             /^BREAKING CHANGE:/                   { if (bump < 3) bump = 3 }
-            /^feat:/                              { if (bump < 2) bump = 2 }
+            /^feat(\([^)]*\))?:/                  { if (bump < 2) bump = 2 }
             /^(fix|perf|refactor|docs|chore|style):/ { if (bump < 1) bump = 1 }
             END {
               if (bump == 0) print "skip"
