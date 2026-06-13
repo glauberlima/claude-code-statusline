@@ -31,13 +31,14 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/cache@v5
+        if: inputs.type == 'stable'
         id: cliff-cache
         with:
           path: ~/.cargo/bin/git-cliff
           key: git-cliff-2.13.1-${{ runner.os }}
 
       - name: Install git-cliff
-        if: steps.cliff-cache.outputs.cache-hit != 'true'
+        if: inputs.type == 'stable' && steps.cliff-cache.outputs.cache-hit != 'true'
         run: cargo install git-cliff --version 2.13.1 --locked
 
       - name: Compute version
@@ -58,7 +59,7 @@ jobs:
             /^(feat|fix|refactor)(\([^)]*\))?!:/ { if (bump < 3) bump = 3 }
             /^BREAKING CHANGE:/                   { if (bump < 3) bump = 3 }
             /^feat(\([^)]*\))?:/                  { if (bump < 2) bump = 2 }
-            /^(fix|perf|refactor|docs|chore|style):/ { if (bump < 1) bump = 1 }
+            /^(fix|perf|refactor|docs|chore|style)(\([^)]*\))?:/ { if (bump < 1) bump = 1 }
             END {
               if (bump == 0) print "skip"
               else if (bump == 1) print "patch"
