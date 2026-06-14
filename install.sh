@@ -172,7 +172,7 @@ case "${OS}" in
 esac
 
 if [[ "${SCRIPT_VERSION}" == "latest" ]]; then
-    TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
+    TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | jq -r '.tag_name // empty')"
     if [[ -z "${TAG}" ]]; then
         error "Could not determine latest release tag."
         exit 1
