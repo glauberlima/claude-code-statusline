@@ -36,6 +36,7 @@ if [[ -f "${TOML_FILE}" ]]; then
     info "Config already exists, skipping: ${TOML_FILE}"
 else
     if ! "${BINARY_DEST}" --print-defaults > "${TOML_FILE}"; then
+        rm -f "${TOML_FILE}"
         error "Failed to generate ${TOML_FILE}"
         exit 1
     fi
