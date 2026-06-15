@@ -4,6 +4,8 @@ mod configure;
 mod git;
 mod input;
 mod render;
+#[cfg(debug_assertions)]
+mod debug_log;
 
 use anyhow::Context;
 
