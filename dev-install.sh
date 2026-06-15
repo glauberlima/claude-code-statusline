@@ -17,6 +17,7 @@ error()   { echo -e "${RED}✗${NC} $*" >&2; }
 INSTALL_DIR="${HOME}/.claude"
 BINARY_DEST="${INSTALL_DIR}/statusline"
 SETTINGS_FILE="${INSTALL_DIR}/settings.json"
+TOML_FILE="${INSTALL_DIR}/statusline.toml"
 COMMAND_PATH="${HOME}/.claude/statusline"
 
 # [1/3] Build debug binary
@@ -29,6 +30,17 @@ info "[2/3] Copying binary to ${BINARY_DEST}..."
 cp target/debug/statusline "${BINARY_DEST}"
 chmod +x "${BINARY_DEST}"
 success "Binary deployed to ${BINARY_DEST}"
+
+# [2.5] Seed config if missing
+if [[ -f "${TOML_FILE}" ]]; then
+    info "Config already exists, skipping: ${TOML_FILE}"
+else
+    if ! "${BINARY_DEST}" --print-defaults > "${TOML_FILE}"; then
+        error "Failed to generate ${TOML_FILE}"
+        exit 1
+    fi
+    success "Created default config: ${TOML_FILE}"
+fi
 
 # [3/3] Configure settings.json
 warn "Overwriting statusLine with dev debug build"
