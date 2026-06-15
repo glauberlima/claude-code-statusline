@@ -37,6 +37,8 @@ fn main() -> anyhow::Result<()> {
     }
 
     let raw = read_stdin()?;
+    #[cfg(debug_assertions)]
+    debug_log::append(&raw);
     let input = input::parse(&raw)?;
     let config = config::load();
     let git_info = git::get_git_info(&input.current_dir);
