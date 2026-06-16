@@ -51,6 +51,22 @@ curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest
 & ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1'))) -InstallDir "C:\custom"
 ```
 
+### Install a specific version
+
+To install a specific release (e.g. for testing an unstable build), set `VERSION` before running:
+
+```bash
+# macOS / Linux / WSL
+VERSION=v1.1.0-dev.6f31b35 curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash
+```
+
+```powershell
+# Windows — PowerShell
+$env:VERSION="v1.1.0-dev.6f31b35"; iex (irm 'https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1')
+```
+
+Release tags are listed on the [GitHub releases page](https://github.com/glauberlima/claude-code-statusline/releases).
+
 ## 📥 Direct Downloads
 
 Pre-built binaries are published with every release. These URLs always point to the latest version:
