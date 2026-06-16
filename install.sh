@@ -24,6 +24,7 @@ step()    { echo -e "\n${CYAN}[$1/3]${NC} $2"; }
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 INSTALL_DIR="${HOME}/.claude"
+VERSION_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -34,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             fi
             INSTALL_DIR="$2"
             shift 2
+            ;;
+        v*)
+            VERSION_ARG="$1"
+            shift
             ;;
         *) shift ;;
     esac
@@ -170,8 +175,8 @@ case "${OS}" in
         ;;
 esac
 
-if [[ -n "${1:-}" ]]; then
-    TAG="${1}"
+if [[ -n "${VERSION_ARG}" ]]; then
+    TAG="${VERSION_ARG}"
 else
     TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | jq -r '.tag_name // empty')"
     if [[ -z "${TAG}" ]]; then
