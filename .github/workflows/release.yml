@@ -238,13 +238,6 @@ jobs:
 
       - uses: actions/download-artifact@v8
 
-      - name: Patch install scripts with release tag
-        env:
-          TAG: ${{ needs.cut.outputs.tag }}
-        run: |
-          sed -i "s/^SCRIPT_VERSION=\"latest\"/SCRIPT_VERSION=\"${TAG}\"/" install.sh
-          sed -i "s/^\$ScriptVersion = \"latest\"/\$ScriptVersion = \"${TAG}\"/" install.ps1
-
       - name: Generate checksums
         run: |
           (cd statusline-macos   && sha256sum statusline-macos)           > checksums.txt
