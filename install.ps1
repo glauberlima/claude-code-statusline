@@ -20,7 +20,6 @@ $GithubRepo    = "glauberlima/claude-code-statusline"
 $GithubApi     = "https://api.github.com/repos/$GithubRepo/releases/latest"
 $GithubDlBase  = "https://github.com/$GithubRepo/releases/download"
 $MaxRetries    = 3
-$ScriptVersion = "latest"          # patched to tag name by CI at release time
 
 # ── Derived paths ──────────────────────────────────────────────────────────────
 if ([string]::IsNullOrEmpty($InstallDir)) {
@@ -148,7 +147,10 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 
 $Asset = "statusline-windows-x64.exe"
 
-if ($ScriptVersion -eq "latest") {
+$EnvVersion = [System.Environment]::GetEnvironmentVariable("VERSION")
+if (-not [string]::IsNullOrEmpty($EnvVersion)) {
+    $Tag = $EnvVersion
+} else {
     $ProgressPreference = 'SilentlyContinue'
     try {
         $Release = Invoke-RestMethod -Uri $GithubApi -UseBasicParsing
@@ -163,8 +165,6 @@ if ($ScriptVersion -eq "latest") {
         Write-Err "Could not determine latest release tag."
         exit 1
     }
-} else {
-    $Tag = $ScriptVersion
 }
 
 Write-Info "Downloading statusline $Tag for $Asset..."
