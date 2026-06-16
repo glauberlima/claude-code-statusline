@@ -29,12 +29,12 @@ Install with one command. Works immediately. Configure when you need it.
 
 **macOS / Linux / WSL**
 ```bash
-curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
 ```
 
 **Windows — PowerShell**
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)))
 ```
 
 ### Custom install directory
@@ -43,12 +43,12 @@ Override where the binary and config are installed (default: `~/.claude`):
 
 ```bash
 # macOS / Linux / WSL
-curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash -s -- --install-dir /custom/path
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --install-dir /custom/path
 ```
 
 ```powershell
 # Windows — PowerShell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1'))) -InstallDir "C:\custom"
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\custom"
 ```
 
 ### Install a specific version
@@ -57,12 +57,12 @@ To install a specific release (e.g. for testing an unstable build), set `VERSION
 
 ```bash
 # macOS / Linux / WSL
-VERSION=v1.1.0-dev.6f31b35 curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.sh | bash
+VERSION=v1.1.0-dev.6f31b35 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
 ```
 
 ```powershell
 # Windows — PowerShell
-$env:VERSION="v1.1.0-dev.6f31b35"; iex (irm 'https://github.com/glauberlima/claude-code-statusline/releases/latest/download/install.ps1')
+$env:VERSION="v1.1.0-dev.6f31b35"; iex (irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1')
 ```
 
 Release tags are listed on the [GitHub releases page](https://github.com/glauberlima/claude-code-statusline/releases).

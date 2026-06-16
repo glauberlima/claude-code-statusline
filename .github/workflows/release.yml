@@ -289,8 +289,6 @@ jobs:
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
-            install.sh
-            install.ps1
             checksums.txt
 
       - name: Create prerelease (unstable)
@@ -307,6 +305,4 @@ jobs:
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
-            install.sh
-            install.ps1
             checksums.txt
