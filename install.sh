@@ -170,8 +170,8 @@ case "${OS}" in
         ;;
 esac
 
-if [[ -n "${VERSION:-}" ]]; then
-    TAG="${VERSION}"
+if [[ -n "${1:-}" ]]; then
+    TAG="${1}"
 else
     TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | jq -r '.tag_name // empty')"
     if [[ -z "${TAG}" ]]; then

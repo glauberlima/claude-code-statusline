@@ -53,16 +53,16 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 ### Install a specific version
 
-To install a specific release (e.g. for testing an unstable build), set `VERSION` before running:
+To install a specific release (e.g. for testing an unstable build), pass the tag as an argument:
 
 ```bash
 # macOS / Linux / WSL
-VERSION=v1.1.0-dev.6f31b35 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s v1.1.0-dev.6f31b35
 ```
 
 ```powershell
 # Windows — PowerShell
-$env:VERSION="v1.1.0-dev.6f31b35"; iex (irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1')
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version v1.1.0-dev.6f31b35
 ```
 
 Release tags are listed on the [GitHub releases page](https://github.com/glauberlima/claude-code-statusline/releases).

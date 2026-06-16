@@ -10,7 +10,8 @@
     .\install.ps1 -InstallDir C:\custom\path
 #>
 param(
-    [string]$InstallDir = ""
+    [string]$InstallDir = "",
+    [string]$Version = ""
 )
 
 Set-StrictMode -Version Latest
@@ -147,9 +148,8 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 
 $Asset = "statusline-windows-x64.exe"
 
-$EnvVersion = [System.Environment]::GetEnvironmentVariable("VERSION")
-if (-not [string]::IsNullOrEmpty($EnvVersion)) {
-    $Tag = $EnvVersion
+if (-not [string]::IsNullOrEmpty($Version)) {
+    $Tag = $Version
 } else {
     $ProgressPreference = 'SilentlyContinue'
     try {
