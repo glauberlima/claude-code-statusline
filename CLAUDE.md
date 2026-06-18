@@ -96,6 +96,8 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 
 All fields are optional. Shown values are defaults.
 
+**Context window display:** The progress bar is scaled against the *usable* portion of the context window. Claude Code reserves ~16.5% as an autocompact buffer; the bar reaches 100% when autocompact triggers, not when the raw window is exhausted. Formula: `used = round((1 - max(0, remaining - 16.5) / 83.5) * 100)`.
+
 ## Security
 
 **`validate_directory()`** in `src/input.rs`:
