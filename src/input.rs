@@ -97,9 +97,20 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         })
         .unwrap_or(0);
 
+    // Context window display: scale used% to the usable range.
+    // Claude Code reserves ~16.5% of the total window as an autocompact buffer.
+    // We subtract that buffer before scaling so the bar reaches 100% exactly when
+    // autocompact triggers, not when the raw window is exhausted.
+    //   usable_remaining = max(0, (remaining - 16.5) / 83.5 * 100)
+    //   used = round(100 - usable_remaining)
+    // Credit: normalization approach from gsd-statusline (https://github.com/open-gsd/gsd-core)
+    const AUTO_COMPACT_BUFFER_PCT: f64 = 16.5;
     let context_percent = cw
         .and_then(|c| c.remaining_percentage)
-        .map(|r| (100.0 - r).clamp(0.0, 100.0) as u8)
+        .map(|r| {
+            let usable_remaining = ((r - AUTO_COMPACT_BUFFER_PCT) / (100.0 - AUTO_COMPACT_BUFFER_PCT) * 100.0).max(0.0);
+            (100.0 - usable_remaining).round().clamp(0.0, 100.0) as u8
+        })
         .unwrap_or(0);
 
     let cost_usd = raw
@@ -187,7 +198,7 @@ mod tests {
     #[test]
     fn computes_context_percent() {
         let r = parse(MINIMAL).unwrap();
-        assert_eq!(r.context_percent, 28); // 100 - 72
+        assert_eq!(r.context_percent, 34); // normalized: (72 - 16.5) / 83.5 * 100 → 66.47% remaining → 34% used
     }
 
     #[test]
