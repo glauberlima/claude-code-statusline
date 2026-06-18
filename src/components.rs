@@ -67,12 +67,7 @@ pub fn build_files(changed: u32) -> String {
 }
 
 pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64) -> String {
-    let raw = input.context_percent;
-    let pct = if raw >= 80 {
-        (raw as f32 + config.usage_offset).clamp(0.0, 100.0) as u8
-    } else {
-        raw
-    };
+    let pct = input.context_percent;
     let bar = build_usage_bar(pct, config.usage_bar_style, wave_time);
     let usage = format_number(input.current_usage);
     let size = format_number(input.context_size);
@@ -357,55 +352,6 @@ mod tests {
         };
         let out = build_git(&info);
         assert!(!out.starts_with(' '), "NotRepo output must not start with space");
-    }
-
-    #[test]
-    fn context_offset_increases_displayed_percent() {
-        let mut input = default_input();
-        input.context_percent = 80; // at threshold
-        let mut cfg = default_config();
-        cfg.usage_offset = 10.0;
-        let out = build_context(&input, &cfg, 0);
-        // Should show 90%, not 80%
-        assert!(out.contains("90%"), "expected 90% but got: {out}");
-    }
-
-    #[test]
-    fn context_offset_clamped_at_100() {
-        let mut input = default_input();
-        input.context_percent = 95;
-        let mut cfg = default_config();
-        cfg.usage_offset = 20.0; // 95 + 20 = 115, clamped to 100
-        let out = build_context(&input, &cfg, 0);
-        assert!(out.contains("100%"), "expected 100% but got: {out}");
-    }
-
-    #[test]
-    fn context_offset_negative_clamped_at_0() {
-        let mut input = default_input();
-        input.context_percent = 82; // above threshold
-        let mut cfg = default_config();
-        cfg.usage_offset = -90.0; // 82 - 90 = -8, clamped to 0
-        let out = build_context(&input, &cfg, 0);
-        assert!(out.contains("0%"), "expected 0% but got: {out}");
-    }
-
-    #[test]
-    fn context_offset_zero_leaves_unchanged() {
-        let input = default_input(); // context_percent = 14
-        let cfg = default_config(); // usage_offset defaults to 0.0
-        let out = build_context(&input, &cfg, 0);
-        assert!(out.contains("14%"), "zero offset must not change percent");
-    }
-
-    #[test]
-    fn context_offset_ignored_below_threshold() {
-        let input = default_input(); // context_percent = 14
-        let mut cfg = default_config();
-        cfg.usage_offset = 20.0;
-        let out = build_context(&input, &cfg, 0);
-        // offset must not apply below 80%
-        assert!(out.contains("14%"), "offset must be ignored below 80%: {out}");
     }
 
     #[test]

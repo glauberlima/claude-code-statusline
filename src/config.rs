@@ -10,8 +10,6 @@ pub struct Config {
     pub messages_language: Language,
     #[serde(default)]
     pub usage_bar_style: BarStyle,
-    #[serde(default)]
-    pub usage_offset: f32,
 }
 
 impl Default for Config {
@@ -21,7 +19,6 @@ impl Default for Config {
             cost: true,
             messages_language: Language::En,
             usage_bar_style: BarStyle::Plain,
-            usage_offset: 0.0,
         }
     }
 }
@@ -108,7 +105,6 @@ pub fn print_defaults() -> String {
         "# messages = false          # show context messages [true|false]",
         "# messages_language = \"en\"  # message language [\"en\"|\"pt\"|\"es\"]",
         "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"]",
-        "# usage_offset = 0.0        # offset added to displayed context % [-100.0..100.0]",
     ]
     .join("\n")
         + "\n"
@@ -604,33 +600,6 @@ usage_bar_style = "rainbow"
         assert!(out.contains("usage_bar_style = \"plain\""));
         assert!(out.contains("[true|false]"));
         assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"]"));
-    }
-
-    #[test]
-    fn usage_offset_defaults_to_zero() {
-        let c = Config::default();
-        assert_eq!(c.usage_offset, 0.0_f32);
-    }
-
-    #[test]
-    fn usage_offset_parses_from_toml() {
-        let toml_str = r#"usage_offset = 5.5"#;
-        let c: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(c.usage_offset, 5.5_f32);
-    }
-
-    #[test]
-    fn usage_offset_negative_parses_from_toml() {
-        let toml_str = r#"usage_offset = -3.0"#;
-        let c: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(c.usage_offset, -3.0_f32);
-    }
-
-    #[test]
-    fn print_defaults_contains_usage_offset() {
-        let out = print_defaults();
-        assert!(out.contains("usage_offset = 0.0"));
-        assert!(out.contains("[-100.0..100.0]"));
     }
 
     #[test]
