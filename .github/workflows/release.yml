@@ -248,8 +248,26 @@ jobs:
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
         id: notes-stable
+        env:
+          TAG: ${{ needs.cut.outputs.tag }}
         run: |
-          BODY=$(awk '/^## /{if(found)exit; found=1; next} found{print}' CHANGELOG.md)
+          CHANGELOG_BODY=$(awk '/^## /{if(found)exit; found=1; next} found{print}' CHANGELOG.md)
+          INSTALL_BLOCK="## Install this version
+
+          **macOS / Linux / WSL**
+          \`\`\`bash
+          curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/download/${TAG}/install.sh | bash -s ${TAG}
+          \`\`\`
+
+          **Windows (PowerShell 5.1+)**
+          \`\`\`powershell
+          & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1'))) -Version ${TAG}
+          \`\`\`
+
+          ---"
+          # Remove leading spaces from INSTALL_BLOCK
+          INSTALL_BLOCK=$(echo "$INSTALL_BLOCK" | sed 's/^          //')
+          BODY="${INSTALL_BLOCK}"$'\n\n'"${CHANGELOG_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
           echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
@@ -274,7 +292,23 @@ jobs:
         run: |
           LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
           RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
-          BODY=$(NO_COLOR=1 git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --strip all 2>/dev/null || true)
+          CLIFF_BODY=$(NO_COLOR=1 git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --strip all 2>/dev/null || true)
+          INSTALL_BLOCK="## Install this version
+
+          **macOS / Linux / WSL**
+          \`\`\`bash
+          curl -fsSL https://github.com/glauberlima/claude-code-statusline/releases/download/${TAG}/install.sh | bash -s ${TAG}
+          \`\`\`
+
+          **Windows (PowerShell 5.1+)**
+          \`\`\`powershell
+          & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1'))) -Version ${TAG}
+          \`\`\`
+
+          ---"
+          # Remove leading spaces from INSTALL_BLOCK
+          INSTALL_BLOCK=$(echo "$INSTALL_BLOCK" | sed 's/^          //')
+          BODY="${INSTALL_BLOCK}"$'\n\n'"${CLIFF_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
           echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
@@ -298,7 +332,7 @@ jobs:
           tag_name: ${{ needs.cut.outputs.tag }}
           prerelease: true
           body: |
-            > ⚠️ **Unstable release** — for testing only. Do not use in production.
+            > ⚠️ **Unstable release** — pre-release build for testing only.
 
             ${{ steps.notes-unstable.outputs.body }}
           files: |
