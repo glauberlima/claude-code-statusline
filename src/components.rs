@@ -43,13 +43,10 @@ pub fn build_directory(input: &ClaudeInput) -> String {
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "unknown".to_string())
     } else {
-        input
-            .current_dir
-            .trim_end_matches('/')
-            .split('/')
-            .next_back()
-            .unwrap_or(&input.current_dir)
-            .to_string()
+        std::path::Path::new(&input.current_dir)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| input.current_dir.clone())
     };
     format!("📁 {BLUE}{name}{NC}")
 }

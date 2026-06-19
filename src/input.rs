@@ -146,15 +146,14 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
 }
 
 /// Returns true if the path is safe to use with a git subprocess.
-/// Rejects: `..` traversal, leading `~`, shell metacharacters (`$`, backtick, `;`).
+/// Rejects: `..` traversal, leading `~`, shell metacharacters (`$`, backtick, `;`), relative paths.
 pub fn validate_directory(path: &str) -> bool {
+    use std::path::{Component, Path};
+
     if path.is_empty() {
         return false;
     }
     if path.contains('\0') {
-        return false;
-    }
-    if path.contains("..") {
         return false;
     }
     if path.starts_with('~') {
@@ -163,7 +162,11 @@ pub fn validate_directory(path: &str) -> bool {
     if path.contains('$') || path.contains('`') || path.contains(';') {
         return false;
     }
-    if !path.starts_with('/') {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return false;
+    }
+    if p.components().any(|c| c == Component::ParentDir) {
         return false;
     }
     true
@@ -223,6 +226,8 @@ mod tests {
     fn rejects_path_traversal() {
         assert!(!validate_directory("../etc/passwd"));
         assert!(!validate_directory("/home/user/../secret"));
+        #[cfg(windows)]
+        assert!(!validate_directory(r"C:\Users\foo\..\secret"));
     }
 
     #[test]
@@ -241,6 +246,11 @@ mod tests {
     fn accepts_absolute_path() {
         assert!(validate_directory("/Users/glauberl/Dev/project"));
         assert!(validate_directory("/tmp/statusline-test"));
+        #[cfg(windows)]
+        {
+            assert!(validate_directory(r"C:\Users\foo\project"));
+            assert!(validate_directory("C:/Users/foo/project"));
+        }
     }
 
     #[test]
