@@ -244,8 +244,11 @@ mod tests {
 
     #[test]
     fn accepts_absolute_path() {
-        assert!(validate_directory("/Users/glauberl/Dev/project"));
-        assert!(validate_directory("/tmp/statusline-test"));
+        #[cfg(not(windows))]
+        {
+            assert!(validate_directory("/Users/glauberl/Dev/project"));
+            assert!(validate_directory("/tmp/statusline-test"));
+        }
         #[cfg(windows)]
         {
             assert!(validate_directory(r"C:\Users\foo\project"));
@@ -261,10 +264,19 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn falls_back_to_project_dir_when_no_current_dir() {
         let json = r#"{"workspace": {"project_dir": "/tmp/project"}}"#;
         let r = parse(json).unwrap();
         assert_eq!(r.current_dir, "/tmp/project");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn falls_back_to_project_dir_when_no_current_dir() {
+        let json = r#"{"workspace": {"project_dir": "C:\\Users\\foo\\project"}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(r.current_dir, r"C:\Users\foo\project");
     }
 
     #[test]
