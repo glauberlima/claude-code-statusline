@@ -34,6 +34,7 @@ pub enum BarStyle {
     Plain,
     Rainbow,
     Gradient,
+    Gsd,
 }
 
 impl<'de> Deserialize<'de> for BarStyle {
@@ -43,11 +44,27 @@ impl<'de> Deserialize<'de> for BarStyle {
             "plain" => Ok(BarStyle::Plain),
             "rainbow" => Ok(BarStyle::Rainbow),
             "gradient" => Ok(BarStyle::Gradient),
+            "gsd" => Ok(BarStyle::Gsd),
             other => {
                 eprintln!("statusline: unknown usage_bar_style \"{other}\", using \"plain\"");
                 Ok(BarStyle::Plain)
             }
         }
+    }
+}
+
+impl BarStyle {
+    // Color scheme adapted from gsd-statusline (https://github.com/open-gsd/gsd-core)
+    pub fn critical_emoji(&self) -> Option<&'static str> {
+        match self {
+            BarStyle::Gsd => Some("💀"),
+            BarStyle::Gradient => Some("🔥"),
+            _ => None,
+        }
+    }
+
+    pub fn blink_at_critical(&self) -> bool {
+        matches!(self, BarStyle::Gsd | BarStyle::Gradient)
     }
 }
 
@@ -86,10 +103,10 @@ pub enum ContextTier {
 impl ContextTier {
     pub fn from_percent(pct: u8) -> Self {
         match pct {
-            0..=20 => Self::VeryLow,
-            21..=40 => Self::Low,
-            41..=60 => Self::Medium,
-            61..=80 => Self::High,
+            0..=30 => Self::VeryLow,
+            31..=50 => Self::Low,
+            51..=70 => Self::Medium,
+            71..=85 => Self::High,
             _ => Self::Critical,
         }
     }
@@ -104,7 +121,7 @@ pub fn print_defaults() -> String {
         "# cost = true               # show cost tracker [true|false]",
         "# messages = false          # show context messages [true|false]",
         "# messages_language = \"en\"  # message language [\"en\"|\"pt\"|\"es\"]",
-        "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"]",
+        "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]",
     ]
     .join("\n")
         + "\n"
@@ -599,29 +616,60 @@ usage_bar_style = "rainbow"
         assert!(out.contains("messages_language = \"en\""));
         assert!(out.contains("usage_bar_style = \"plain\""));
         assert!(out.contains("[true|false]"));
-        assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"]"));
+        assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]"));
     }
 
     #[test]
     fn tier_from_percent() {
         assert!(matches!(ContextTier::from_percent(0), ContextTier::VeryLow));
-        assert!(matches!(
-            ContextTier::from_percent(20),
-            ContextTier::VeryLow
-        ));
-        assert!(matches!(ContextTier::from_percent(21), ContextTier::Low));
-        assert!(matches!(ContextTier::from_percent(40), ContextTier::Low));
-        assert!(matches!(ContextTier::from_percent(41), ContextTier::Medium));
-        assert!(matches!(ContextTier::from_percent(60), ContextTier::Medium));
-        assert!(matches!(ContextTier::from_percent(61), ContextTier::High));
-        assert!(matches!(ContextTier::from_percent(80), ContextTier::High));
-        assert!(matches!(
-            ContextTier::from_percent(81),
-            ContextTier::Critical
-        ));
-        assert!(matches!(
-            ContextTier::from_percent(100),
-            ContextTier::Critical
-        ));
+        assert!(matches!(ContextTier::from_percent(30), ContextTier::VeryLow));
+        assert!(matches!(ContextTier::from_percent(31), ContextTier::Low));
+        assert!(matches!(ContextTier::from_percent(50), ContextTier::Low));
+        assert!(matches!(ContextTier::from_percent(51), ContextTier::Medium));
+        assert!(matches!(ContextTier::from_percent(70), ContextTier::Medium));
+        assert!(matches!(ContextTier::from_percent(71), ContextTier::High));
+        assert!(matches!(ContextTier::from_percent(85), ContextTier::High));
+        assert!(matches!(ContextTier::from_percent(86), ContextTier::Critical));
+        assert!(matches!(ContextTier::from_percent(100), ContextTier::Critical));
+    }
+
+    #[test]
+    fn gsd_bar_style_deserializes() {
+        let c: Config = toml::from_str(r#"usage_bar_style = "gsd""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::Gsd));
+    }
+
+    #[test]
+    fn critical_emoji_gsd() {
+        assert_eq!(BarStyle::Gsd.critical_emoji(), Some("💀"));
+    }
+
+    #[test]
+    fn critical_emoji_gradient() {
+        assert_eq!(BarStyle::Gradient.critical_emoji(), Some("🔥"));
+    }
+
+    #[test]
+    fn critical_emoji_plain_none() {
+        assert_eq!(BarStyle::Plain.critical_emoji(), None);
+    }
+
+    #[test]
+    fn critical_emoji_rainbow_none() {
+        assert_eq!(BarStyle::Rainbow.critical_emoji(), None);
+    }
+
+    #[test]
+    fn blink_at_critical() {
+        assert!(BarStyle::Gsd.blink_at_critical());
+        assert!(BarStyle::Gradient.blink_at_critical());
+        assert!(!BarStyle::Plain.blink_at_critical());
+        assert!(!BarStyle::Rainbow.blink_at_critical());
+    }
+
+    #[test]
+    fn print_defaults_contains_gsd() {
+        let out = print_defaults();
+        assert!(out.contains("\"gsd\""), "print_defaults must list gsd option");
     }
 }

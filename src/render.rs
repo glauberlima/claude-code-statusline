@@ -4,6 +4,7 @@ pub const BLUE: &str = "\x1b[0;34m";
 pub const MAGENTA: &str = "\x1b[0;35m";
 pub const CYAN: &str = "\x1b[0;36m";
 pub const ORANGE: &str = "\x1b[0;33m";
+pub const ORANGE_256: &str = "\x1b[38;5;208m";
 pub const GRAY: &str = "\x1b[0;90m";
 pub const NC: &str = "\x1b[0m";
 

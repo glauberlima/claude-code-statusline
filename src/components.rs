@@ -3,26 +3,30 @@ use crate::git::{GitInfo, GitState};
 use crate::input::ClaudeInput;
 use crate::render::{
     BAR_EMPTY, BAR_FILLED, BAR_WIDTH, BLUE, CYAN, GRADIENT_COLORS, GRAY, GREEN, MAGENTA, NC,
-    ORANGE, RED, WAVE_COLORS,
+    ORANGE, ORANGE_256, RED, WAVE_COLORS,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<String> {
-    let wave_time = if matches!(config.usage_bar_style, BarStyle::Rainbow) {
+    let now_secs = || {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0)
+    };
+    let wave_time = if matches!(config.usage_bar_style, BarStyle::Rainbow) {
+        now_secs()
     } else {
         0
     };
+    let message_time = if config.messages { now_secs() } else { 0 };
 
     vec![
         build_directory(input),
         build_git(git),
         build_files(git.changed_files),
         build_model(input),
-        build_context(input, config, wave_time),
+        build_context(input, config, wave_time, message_time),
         build_cost(input.cost_usd, config),
     ]
 }
@@ -66,11 +70,25 @@ pub fn build_files(changed: u32) -> String {
     format!("✏️ {ORANGE}changes{NC}")
 }
 
-pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64) -> String {
+pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, message_time: u64) -> String {
     let pct = input.context_percent;
     let bar = build_usage_bar(pct, config.usage_bar_style, wave_time);
     let usage = format_number(input.current_usage);
     let size = format_number(input.context_size);
+
+    let is_critical = matches!(ContextTier::from_percent(pct), ContextTier::Critical);
+    let emoji = if is_critical {
+        let e = config.usage_bar_style.critical_emoji().unwrap_or("📊");
+        if config.usage_bar_style.blink_at_critical() {
+            format!("\x1b[5m{e}\x1b[25m")
+        } else {
+            e.to_string()
+        }
+    } else {
+        "📊".to_string()
+    };
+
+    let bar_and_pct = format!("{bar}{GRAY}]{NC} {pct}%");
 
     let message_part = if config.messages {
         let tier = ContextTier::from_percent(pct);
@@ -78,14 +96,14 @@ pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64) -> St
         if msgs.is_empty() {
             String::new()
         } else {
-            let idx = (wave_time as usize) % msgs.len();
+            let idx = (message_time as usize) % msgs.len();
             format!(" {GRAY}|{NC} {CYAN}{}{NC}", msgs[idx])
         }
     } else {
         String::new()
     };
 
-    format!("📊 {GRAY}[{NC}{bar}{GRAY}]{NC} {pct}% {usage}/{size}{message_part}")
+    format!("{emoji} {GRAY}[{NC}{bar_and_pct} {usage}/{size}{message_part}")
 }
 
 pub fn build_cost(cost_usd: f64, config: &Config) -> String {
@@ -95,17 +113,10 @@ pub fn build_cost(cost_usd: f64, config: &Config) -> String {
     format!("💰 {GREEN}${cost_usd:.2}{NC}")
 }
 
-fn fill_plain(filled: usize, percent: u8) -> String {
+fn fill_solid(filled: usize, color: &str) -> String {
     if filled == 0 {
         return String::new();
     }
-    let tier = ContextTier::from_percent(percent);
-    let color = match tier {
-        ContextTier::VeryLow => GREEN,
-        ContextTier::Low => CYAN,
-        ContextTier::Medium | ContextTier::High => ORANGE,
-        ContextTier::Critical => RED,
-    };
     let mut s = color.to_string();
     for _ in 0..filled {
         s.push_str(BAR_FILLED);
@@ -114,7 +125,17 @@ fn fill_plain(filled: usize, percent: u8) -> String {
     s
 }
 
-fn fill_rainbow(filled: usize, wave_time: u64) -> String {
+fn fill_plain(filled: usize, percent: u8, _wave_time: u64) -> String {
+    let color = match ContextTier::from_percent(percent) {
+        ContextTier::VeryLow => GREEN,
+        ContextTier::Low => CYAN,
+        ContextTier::Medium | ContextTier::High => ORANGE,
+        ContextTier::Critical => RED,
+    };
+    fill_solid(filled, color)
+}
+
+fn fill_rainbow(filled: usize, _percent: u8, wave_time: u64) -> String {
     if filled == 0 {
         return String::new();
     }
@@ -128,7 +149,7 @@ fn fill_rainbow(filled: usize, wave_time: u64) -> String {
     s
 }
 
-fn fill_gradient(filled: usize) -> String {
+fn fill_gradient(filled: usize, _percent: u8, _wave_time: u64) -> String {
     if filled == 0 {
         return String::new();
     }
@@ -145,23 +166,36 @@ fn fill_gradient(filled: usize) -> String {
     s
 }
 
+fn fill_gsd(filled: usize, percent: u8, _wave_time: u64) -> String {
+    let color = match ContextTier::from_percent(percent) {
+        ContextTier::VeryLow | ContextTier::Low => GREEN,
+        ContextTier::Medium => ORANGE,
+        ContextTier::High => ORANGE_256,
+        ContextTier::Critical => RED,
+    };
+    fill_solid(filled, color)
+}
+
 pub fn build_usage_bar(percent: u8, style: BarStyle, wave_time: u64) -> String {
     let pct = percent.clamp(0, 100) as usize;
     let filled = pct * BAR_WIDTH / 100;
     let empty = BAR_WIDTH - filled;
 
     let colored = match style {
-        BarStyle::Plain => fill_plain(filled, percent),
-        BarStyle::Rainbow => fill_rainbow(filled, wave_time),
-        BarStyle::Gradient => fill_gradient(filled),
+        BarStyle::Plain => fill_plain(filled, percent, wave_time),
+        BarStyle::Rainbow => fill_rainbow(filled, percent, wave_time),
+        BarStyle::Gradient => fill_gradient(filled, percent, wave_time),
+        BarStyle::Gsd => fill_gsd(filled, percent, wave_time),
     };
 
     let mut bar = colored;
-    bar.push_str(GRAY);
-    for _ in 0..empty {
-        bar.push_str(BAR_EMPTY);
+    if empty > 0 {
+        bar.push_str(GRAY);
+        for _ in 0..empty {
+            bar.push_str(BAR_EMPTY);
+        }
+        bar.push_str(NC);
     }
-    bar.push_str(NC);
     bar
 }
 
@@ -359,10 +393,108 @@ mod tests {
         let input = default_input();
         let mut cfg = default_config();
         cfg.messages = true;
-        let out = build_context(&input, &cfg, 0);
+        let out = build_context(&input, &cfg, 0, 0);
         assert!(out.contains("📊"));
         // message text comes from VeryLow tier (14%)
         assert!(out.len() > "📊".len(), "should have message content");
+    }
+
+    #[test]
+    fn fill_gsd_verylow_is_green() {
+        // 10% → VeryLow → GREEN
+        let bar = build_usage_bar(10, BarStyle::Gsd, 0);
+        assert!(bar.contains(GREEN), "VeryLow gsd must use GREEN: {bar:?}");
+        assert!(bar.contains('█'));
+    }
+
+    #[test]
+    fn fill_gsd_low_is_green() {
+        // 40% → Low → GREEN
+        let bar = build_usage_bar(40, BarStyle::Gsd, 0);
+        assert!(bar.contains(GREEN), "Low gsd must use GREEN: {bar:?}");
+    }
+
+    #[test]
+    fn fill_gsd_medium_is_yellow() {
+        // 60% → Medium → yellow \x1b[0;33m
+        let bar = build_usage_bar(60, BarStyle::Gsd, 0);
+        assert!(bar.contains("\x1b[0;33m"), "Medium gsd must use yellow: {bar:?}");
+    }
+
+    #[test]
+    fn fill_gsd_high_is_orange_256() {
+        // 80% → High → 256-color orange 208
+        let bar = build_usage_bar(80, BarStyle::Gsd, 0);
+        assert!(bar.contains("\x1b[38;5;208m"), "High gsd must use 256-color orange: {bar:?}");
+    }
+
+    #[test]
+    fn fill_gsd_critical_is_red() {
+        // 90% → Critical → RED
+        let bar = build_usage_bar(90, BarStyle::Gsd, 0);
+        assert!(bar.contains(RED), "Critical gsd must use RED: {bar:?}");
+    }
+
+    #[test]
+    fn context_gsd_critical_shows_skull() {
+        let mut input = default_input();
+        input.context_percent = 90; // Critical tier (86–100)
+        let mut cfg = default_config();
+        cfg.usage_bar_style = BarStyle::Gsd;
+        let out = build_context(&input, &cfg, 0, 0);
+        assert!(out.contains("💀"), "gsd critical must show 💀: {out}");
+        assert!(!out.contains("📊"), "gsd critical must not show 📊: {out}");
+    }
+
+    #[test]
+    fn context_gsd_critical_blinks() {
+        let mut input = default_input();
+        input.context_percent = 90;
+        let mut cfg = default_config();
+        cfg.usage_bar_style = BarStyle::Gsd;
+        let out = build_context(&input, &cfg, 0, 0);
+        assert!(out.contains("\x1b[5m💀\x1b[25m"), "gsd critical must blink the skull emoji: {out:?}");
+    }
+
+    #[test]
+    fn context_gsd_non_critical_shows_chart() {
+        let mut input = default_input();
+        input.context_percent = 50; // Medium tier
+        let mut cfg = default_config();
+        cfg.usage_bar_style = BarStyle::Gsd;
+        let out = build_context(&input, &cfg, 0, 0);
+        assert!(out.contains("📊"), "gsd non-critical must show 📊: {out}");
+        assert!(!out.contains("💀"), "gsd non-critical must not show 💀: {out}");
+    }
+
+    #[test]
+    fn context_gradient_critical_shows_fire() {
+        let mut input = default_input();
+        input.context_percent = 90;
+        let mut cfg = default_config();
+        cfg.usage_bar_style = BarStyle::Gradient;
+        let out = build_context(&input, &cfg, 0, 0);
+        assert!(out.contains("🔥"), "gradient critical must show 🔥: {out}");
+        assert!(!out.contains("📊"), "gradient critical must not show 📊: {out}");
+    }
+
+    #[test]
+    fn context_gradient_critical_blinks() {
+        let mut input = default_input();
+        input.context_percent = 90;
+        let mut cfg = default_config();
+        cfg.usage_bar_style = BarStyle::Gradient;
+        let out = build_context(&input, &cfg, 0, 0);
+        assert!(out.contains("\x1b[5m🔥\x1b[25m"), "gradient critical must blink the fire emoji: {out:?}");
+    }
+
+    #[test]
+    fn context_plain_critical_shows_chart() {
+        let mut input = default_input();
+        input.context_percent = 90;
+        let out = build_context(&input, &default_config(), 0, 0);
+        assert!(out.contains("📊"), "plain critical must always show 📊: {out}");
+        assert!(!out.contains("💀"), "plain must never show 💀: {out}");
     }
 
 }

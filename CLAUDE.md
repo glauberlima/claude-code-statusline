@@ -91,12 +91,14 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 # cost = true               # show cost tracker [true|false]
 # messages = false          # show context messages [true|false]
 # messages_language = "en"  # message language ["en"|"pt"|"es"]
-# usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"]
+# usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"|"gsd"]
 ```
 
 All fields are optional. Shown values are defaults.
 
 **Context window display:** The progress bar is scaled against the *usable* portion of the context window. Claude Code reserves ~16.5% as an autocompact buffer; the bar reaches 100% when autocompact triggers, not when the raw window is exhausted. Formula: `used = round((1 - max(0, remaining - 16.5) / 83.5) * 100)`.
+
+**Blink at Critical (`gsd` and `gradient` styles):** At Critical tier (≥86%), the emoji (💀 or 🔥) blinks via ANSI SGR 5 (`\x1b[5m`). This works in iTerm2, macOS Terminal, and kitty. **Ghostty does not render SGR 5 text blink** by design — the emoji appears without blinking. This is a known Ghostty limitation ([discussion #4258](https://github.com/ghostty-org/ghostty/discussions/4258)), not a bug in this binary.
 
 ## Security
 
