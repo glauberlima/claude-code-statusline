@@ -5,7 +5,7 @@
 .DESCRIPTION
     Downloads the latest statusline binary and configures Claude Code.
 .EXAMPLE
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/refs/heads/main/install.ps1)))
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)))
 .EXAMPLE
     .\install.ps1 -InstallDir C:\custom\path
 #>
