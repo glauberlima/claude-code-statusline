@@ -48,21 +48,33 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 ```powershell
 # Windows — PowerShell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\custom"
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\Custom\Path"
 ```
 
 ### Install a specific version
 
-To install a specific release (e.g. for testing an unstable build), pass the tag as an argument:
+To install a specific release (e.g. for testing an unstable build):
 
 ```bash
 # macOS / Linux / WSL
-curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s v1.1.0-dev.6f31b35
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version v1.1.0-dev.6f31b35
 ```
 
 ```powershell
 # Windows — PowerShell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version v1.1.0-dev.6f31b35
+```
+
+Both parameters can be combined:
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --install-dir /custom/path --version v1.1.0-dev.6f31b35
+```
+
+```powershell
+# Windows — PowerShell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -InstallDir "C:\Custom\Path" -Version v1.1.0-dev.6f31b35
 ```
 
 Release tags are listed on the [GitHub releases page](https://github.com/glauberlima/claude-code-statusline/releases).
@@ -102,7 +114,7 @@ Edit `~/.claude/statusline.toml` to customize features. Generate the default con
 & "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
 ```
 
-Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`).
+Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`/`gsd`).
 
 ## 🛠️ Development
 
