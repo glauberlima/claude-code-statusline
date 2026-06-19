@@ -36,9 +36,13 @@ while [[ $# -gt 0 ]]; do
             INSTALL_DIR="$2"
             shift 2
             ;;
-        v*)
-            VERSION_ARG="$1"
-            shift
+        --version)
+            if [[ -z "${2:-}" ]]; then
+                error "--version requires an argument."
+                exit 1
+            fi
+            VERSION_ARG="$2"
+            shift 2
             ;;
         *) shift ;;
     esac

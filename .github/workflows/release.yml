@@ -252,9 +252,9 @@ jobs:
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
           CHANGELOG_BODY=$(awk '/^## /{if(found)exit; found=1; next} found{print}' CHANGELOG.md)
-          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s ${TAG}"
+          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
           PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
-          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows (PowerShell 5.1+)**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
+          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
           BODY="${INSTALL_BLOCK}"$'\n\n'"${CHANGELOG_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
@@ -281,9 +281,9 @@ jobs:
           LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
           RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
           CLIFF_BODY=$(NO_COLOR=1 git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --strip all 2>/dev/null || true)
-          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s ${TAG}"
+          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
           PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
-          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows (PowerShell 5.1+)**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
+          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
           BODY="${INSTALL_BLOCK}"$'\n\n'"${CLIFF_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
