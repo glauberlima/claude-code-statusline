@@ -10,8 +10,8 @@
     .\install.ps1 -InstallDir C:\custom\path
 #>
 param(
-    [string]$InstallDir = "",
-    [string]$Version = ""
+    [string]$InstallDir,
+    [string]$Version
 )
 
 Set-StrictMode -Version Latest
