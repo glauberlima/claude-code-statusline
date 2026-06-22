@@ -373,8 +373,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git diff --staged --quiet || git commit -m "docs: add security scan section to README [skip ci]"
-          git diff --staged --quiet || git push origin main
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: add security scan section to README [skip ci]"
+            git push origin main
+          fi
 
       - name: Create prerelease (unstable)
         if: inputs.type == 'unstable'
