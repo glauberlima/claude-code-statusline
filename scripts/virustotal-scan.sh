@@ -33,10 +33,10 @@ scan_binary() {
   fi
 
   echo "Polling analysis $analysis_id for $name..." >&2
+  sleep 60
   local attempt=0
   local max_attempts=20
   while [ $attempt -lt $max_attempts ]; do
-    sleep 30
     attempt=$((attempt + 1))
     echo "  Poll attempt $attempt/$max_attempts..." >&2
 
@@ -61,9 +61,10 @@ scan_binary() {
     fi
 
     echo "  Status: $status" >&2
+    sleep 15
   done
 
-  echo "Scan timeout for $name after 10 minutes" >&2
+  echo "Scan timeout for $name after 6 minutes" >&2
   exit 1
 }
 
