@@ -251,18 +251,16 @@ jobs:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           chmod +x scripts/virustotal-scan.sh
-          RESULTS=$(VT_API_KEY="$VT_API_KEY" bash scripts/virustotal-scan.sh \
+          VT_API_KEY="$VT_API_KEY" bash scripts/virustotal-scan.sh \
             statusline-macos/statusline-macos \
             statusline-linux-x64/statusline-linux-x64 \
-            statusline-windows-x64/statusline-windows-x64.exe)
-          echo "results<<VT_EOF" >> "$GITHUB_OUTPUT"
-          echo "$RESULTS"        >> "$GITHUB_OUTPUT"
-          echo "VT_EOF"          >> "$GITHUB_OUTPUT"
+            statusline-windows-x64/statusline-windows-x64.exe \
+            > /tmp/vt-results.txt
 
       - name: Build VirusTotal security section
         id: vt-section
         run: |
-          RESULTS="${{ steps.vt-scan.outputs.results }}"
+          RESULTS=$(cat /tmp/vt-results.txt)
           TABLE="## 🛡️ Security scan\n\nAll binaries scanned by VirusTotal before this release was published.\n\n| Binary | Result | Report |\n|--------|--------|--------|\n"
           while IFS='|' read -r name malicious total sha256 gui_url; do
             [ -z "$name" ] && continue
