@@ -10,16 +10,20 @@ scan_binary() {
   name=$(basename "$path")
 
   echo "Uploading $name to VirusTotal..." >&2
-  local upload_response
-  upload_response=$(curl -fsSL \
+  local upload_response http_code body
+  body=$(curl -sSL \
     --request POST \
     --url "https://www.virustotal.com/api/v3/files" \
     --header "x-apikey: ${VT_API_KEY}" \
     --form "file=@${path}" \
-    2>&1) || {
-    echo "Upload failed for $name: $upload_response" >&2
+    --write-out "\n%{http_code}")
+  http_code=$(printf '%s' "$body" | tail -1)
+  body=$(printf '%s' "$body" | head -n -1)
+  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+    echo "Upload failed for $name (HTTP $http_code): $body" >&2
     exit 1
-  }
+  fi
+  upload_response="$body"
 
   local analysis_id
   analysis_id=$(echo "$upload_response" | jq -r '.data.id')
