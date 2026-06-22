@@ -245,6 +245,44 @@ jobs:
           (cd statusline-windows-x64 && sha256sum statusline-windows-x64.exe) >> checksums.txt
           cat checksums.txt
 
+      - name: Scan binaries with VirusTotal
+        id: vt-scan
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          chmod +x scripts/virustotal-scan.sh
+          RESULTS=$(VT_API_KEY="$VT_API_KEY" bash scripts/virustotal-scan.sh \
+            statusline-macos/statusline-macos \
+            statusline-linux-x64/statusline-linux-x64 \
+            statusline-windows-x64/statusline-windows-x64.exe)
+          echo "results<<VT_EOF" >> "$GITHUB_OUTPUT"
+          echo "$RESULTS"        >> "$GITHUB_OUTPUT"
+          echo "VT_EOF"          >> "$GITHUB_OUTPUT"
+
+      - name: Build VirusTotal security section
+        id: vt-section
+        run: |
+          RESULTS="${{ steps.vt-scan.outputs.results }}"
+          TABLE="## 🛡️ Security scan\n\nAll binaries scanned by VirusTotal before this release was published.\n\n| Binary | Result | Report |\n|--------|--------|--------|\n"
+          while IFS='|' read -r name malicious total sha256 gui_url; do
+            [ -z "$name" ] && continue
+            if [ "$malicious" = "0" ]; then
+              COLOR="brightgreen"
+              LABEL="clean"
+            else
+              COLOR="red"
+              LABEL="flagged"
+            fi
+            BADGE_TEXT="${malicious}%2F${total}_${LABEL}"
+            BADGE_URL="https://img.shields.io/badge/VirusTotal-${BADGE_TEXT}-${COLOR}"
+            TABLE="${TABLE}| ${name} | ![${malicious}/${total} engines](${BADGE_URL}) | [View report](${gui_url}) |\n"
+          done <<< "$RESULTS"
+          TABLE="${TABLE}\n---"
+          echo "section<<VT_SEC_EOF" >> "$GITHUB_OUTPUT"
+          printf "%b" "$TABLE"       >> "$GITHUB_OUTPUT"
+          echo ""                    >> "$GITHUB_OUTPUT"
+          echo "VT_SEC_EOF"          >> "$GITHUB_OUTPUT"
+
       - name: Extract release notes from CHANGELOG (stable)
         if: inputs.type == 'stable'
         id: notes-stable
@@ -255,7 +293,8 @@ jobs:
           CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
           PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
           INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
-          BODY="${INSTALL_BLOCK}"$'\n\n'"${CHANGELOG_BODY}"
+          VT_SECTION="${{ steps.vt-section.outputs.section }}"
+          BODY="${VT_SECTION}"$'\n\n'"${INSTALL_BLOCK}"$'\n\n'"${CHANGELOG_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
           echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
@@ -284,7 +323,8 @@ jobs:
           CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
           PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
           INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
-          BODY="${INSTALL_BLOCK}"$'\n\n'"${CLIFF_BODY}"
+          VT_SECTION="${{ steps.vt-section.outputs.section }}"
+          BODY="${VT_SECTION}"$'\n\n'"${INSTALL_BLOCK}"$'\n\n'"${CLIFF_BODY}"
           echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
           echo "$BODY" >> "$GITHUB_OUTPUT"
           echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
@@ -300,6 +340,43 @@ jobs:
             statusline-linux-x64/statusline-linux-x64
             statusline-windows-x64/statusline-windows-x64.exe
             checksums.txt
+
+      - name: Update README security section (stable)
+        if: inputs.type == 'stable'
+        run: |
+          SECURITY_SECTION="## 🛡️ Security\n\nAll release binaries are automatically scanned by [VirusTotal](https://virustotal.com) before publishing.\nEach release page includes the scan results and direct links to the VirusTotal reports for every binary."
+
+          if grep -q "^## 🛡️ Security$" README.md; then
+            # Replace existing section up to the next ## heading
+            awk '
+              /^## 🛡️ Security$/ { skip=1; next }
+              skip && /^## / { skip=0 }
+              !skip { print }
+            ' README.md > README.md.tmp
+            # Find insertion point: before "## 📥 Direct Downloads"
+            awk -v section="$SECURITY_SECTION" '
+              /^## 📥 Direct Downloads/ {
+                printf "%b\n\n", section
+              }
+              { print }
+            ' README.md.tmp > README.md
+            rm README.md.tmp
+          else
+            # Insert before "## 📥 Direct Downloads"
+            awk -v section="$SECURITY_SECTION" '
+              /^## 📥 Direct Downloads/ {
+                printf "%b\n\n", section
+              }
+              { print }
+            ' README.md > README.md.tmp
+            mv README.md.tmp README.md
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: add security scan section to README [skip ci]"
+          git push origin main
 
       - name: Create prerelease (unstable)
         if: inputs.type == 'unstable'
