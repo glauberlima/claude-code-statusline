@@ -228,7 +228,7 @@ jobs:
     needs: [cut, build-macos, build-linux, build-windows]
     if: needs.cut.outputs.skipped != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
@@ -246,7 +246,6 @@ jobs:
           cat checksums.txt
 
       - name: Scan binaries with VirusTotal
-        id: vt-scan
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
