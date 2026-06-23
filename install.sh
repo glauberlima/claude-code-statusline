@@ -89,11 +89,6 @@ cleanup_on_error() {
     exit 1
 }
 
-# ── WSL detection ──────────────────────────────────────────────────────────────
-is_wsl() {
-    [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
-}
-
 # ── Dep version helper ─────────────────────────────────────────────────────────
 dep_version() {
     "$1" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || echo "found"
@@ -162,10 +157,6 @@ for dep in claude curl; do
     success "${dep} $(dep_version "${dep}")"
 done
 
-if is_wsl; then
-    muted "Detected: WSL environment"
-fi
-
 # [2/3] Install binary
 step 2 "Installing binary..."
 
@@ -182,7 +173,7 @@ esac
 if [[ -n "${VERSION_ARG}" ]]; then
     TAG="${VERSION_ARG}"
 else
-    TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | jq -r '.tag_name // empty')"
+    TAG="$(curl -fsSL "${GITHUB_API}" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')"
     if [[ -z "${TAG}" ]]; then
         error "Could not determine latest release tag."
         exit 1
