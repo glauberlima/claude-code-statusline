@@ -9,7 +9,7 @@ Rust binary statusline for Claude Code CLI displaying (in order):
 - Directory (📁)
 - Git branch (🌿) when in a Git repository
 - File changes (✏️) when present
-- Model name (🤖) with thinking indicator (🧠) when active
+- Model name (🤖)
 - Context usage visualization with progress bar (📊)
 - Cost tracking (💰) when present and enabled
 
@@ -68,7 +68,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 |--------|----------------|
 | `src/main.rs` | Entry point: `--print-defaults`, `--version`, `--configure-settings` flags or parse→build→render pipeline |
 | `src/configure.rs` | `--configure-settings <settings_path> <command_path>` — reads/merges/writes `~/.claude/settings.json` atomically |
-| `src/input.rs` | JSON parsing via `serde_json`; `thinking_active` from `effort`+`thinking` fields; `validate_directory()` for security |
+| `src/input.rs` | JSON parsing via `serde_json`; `validate_directory()` for security |
 | `src/config.rs` | TOML config loading; `BarStyle`/`Language` enums with fallback warnings; `print_defaults()` |
 | `src/git.rs` | Single `git status --porcelain=v2 --branch --untracked-files=all` call; `parse_porcelain_v2()` |
 | `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_cost`); `build_all()` orchestrator |

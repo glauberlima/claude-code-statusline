@@ -32,8 +32,7 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
 }
 
 pub fn build_model(input: &ClaudeInput) -> String {
-    let brain = if input.thinking_active { " 🧠" } else { "" };
-    format!("🤖 {CYAN}{}{NC}{brain}", input.model_name)
+    format!("🤖 {CYAN}{}{NC}", input.model_name)
 }
 
 pub fn build_directory(input: &ClaudeInput) -> String {
@@ -230,7 +229,6 @@ mod tests {
             current_usage: 28_000,
             context_percent: 14,
             cost_usd: 1.23,
-            thinking_active: false,
         }
     }
 
@@ -242,14 +240,6 @@ mod tests {
     fn model_contains_name() {
         let out = build_model(&default_input());
         assert!(out.contains("Sonnet 4.6"));
-    }
-
-    #[test]
-    fn model_shows_brain_when_thinking() {
-        let mut input = default_input();
-        input.thinking_active = true;
-        let out = build_model(&input);
-        assert!(out.contains("🧠"));
     }
 
     #[test]

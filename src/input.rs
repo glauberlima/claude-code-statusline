@@ -8,7 +8,6 @@ pub struct ClaudeInput {
     pub current_usage: u32,
     pub context_percent: u8,
     pub cost_usd: f64,
-    pub thinking_active: bool,
 }
 
 #[derive(Deserialize)]
@@ -17,8 +16,6 @@ struct RawInput {
     workspace: Option<RawWorkspace>,
     context_window: Option<RawContextWindow>,
     cost: Option<RawCost>,
-    effort: Option<RawEffort>,
-    thinking: Option<RawThinking>,
 }
 
 #[derive(Deserialize)]
@@ -51,16 +48,6 @@ struct RawUsage {
 #[derive(Deserialize)]
 struct RawCost {
     total_cost_usd: Option<f64>,
-}
-
-#[derive(Deserialize)]
-struct RawEffort {
-    level: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct RawThinking {
-    enabled: Option<bool>,
 }
 
 pub fn parse(json: &str) -> Result<ClaudeInput> {
@@ -119,21 +106,6 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         .and_then(|c| c.total_cost_usd)
         .unwrap_or(0.0);
 
-    let effort_max = raw
-        .effort
-        .as_ref()
-        .and_then(|e| e.level.as_deref())
-        .map(|l| l == "max")
-        .unwrap_or(false);
-
-    let thinking_on = raw
-        .thinking
-        .as_ref()
-        .and_then(|t| t.enabled)
-        .unwrap_or(false);
-
-    let thinking_active = effort_max && thinking_on;
-
     Ok(ClaudeInput {
         model_name,
         current_dir,
@@ -141,7 +113,6 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         current_usage,
         context_percent,
         cost_usd,
-        thinking_active,
     })
 }
 
@@ -217,12 +188,6 @@ mod tests {
     }
 
     #[test]
-    fn thinking_inactive_by_default() {
-        let r = parse(MINIMAL).unwrap();
-        assert!(!r.thinking_active);
-    }
-
-    #[test]
     fn rejects_path_traversal() {
         assert!(!validate_directory("../etc/passwd"));
         assert!(!validate_directory("/home/user/../secret"));
@@ -284,20 +249,6 @@ mod tests {
         let json = r#"{"workspace": {"current_dir": "../etc/passwd"}}"#;
         let r = parse(json).unwrap();
         assert!(r.current_dir.is_empty());
-    }
-
-    #[test]
-    fn thinking_active_when_effort_max_and_thinking_enabled() {
-        let json = r#"{"effort": {"level": "max"}, "thinking": {"enabled": true}}"#;
-        let r = parse(json).unwrap();
-        assert!(r.thinking_active);
-    }
-
-    #[test]
-    fn thinking_inactive_when_thinking_enabled_but_not_max_effort() {
-        let json = r#"{"thinking": {"enabled": true}}"#;
-        let r = parse(json).unwrap();
-        assert!(!r.thinking_active);
     }
 
     #[test]
