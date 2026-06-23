@@ -57,5 +57,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Check coverage ≥ 90%
-        run: cargo llvm-cov --all-features --fail-under-lines 90
+      - name: Check coverage ≥ 95%
+        run: cargo llvm-cov --all-features --fail-under-lines 95

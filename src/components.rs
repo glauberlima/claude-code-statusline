@@ -75,7 +75,7 @@ pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, messa
     let emoji = if pct >= 96 {
         "💀".to_string()
     } else if pct >= 86 {
-        format!("\x1b[5m🔥\x1b[25m")
+        "\x1b[5m🔥\x1b[25m".to_string()
     } else {
         "📊".to_string()
     };
