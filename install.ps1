@@ -140,12 +140,6 @@ foreach ($dep in @("claude")) {
 # [2/3] Install binary
 Write-Step 2 "Installing binary..."
 
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
-    Write-Err "Unsupported architecture: $arch. Only x64 is supported."
-    exit 1
-}
-
 $Asset = "statusline-windows-x64.exe"
 
 if (-not [string]::IsNullOrEmpty($Version)) {
