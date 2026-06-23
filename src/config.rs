@@ -54,15 +54,6 @@ impl<'de> Deserialize<'de> for BarStyle {
 }
 
 impl BarStyle {
-    // Color scheme adapted from gsd-statusline (https://github.com/open-gsd/gsd-core)
-    pub fn critical_emoji(&self) -> Option<&'static str> {
-        match self {
-            BarStyle::Gsd => Some("💀"),
-            BarStyle::Gradient => Some("🔥"),
-            _ => None,
-        }
-    }
-
     pub fn blink_at_critical(&self) -> bool {
         matches!(self, BarStyle::Gsd | BarStyle::Gradient)
     }
@@ -637,26 +628,6 @@ usage_bar_style = "rainbow"
     fn gsd_bar_style_deserializes() {
         let c: Config = toml::from_str(r#"usage_bar_style = "gsd""#).unwrap();
         assert!(matches!(c.usage_bar_style, BarStyle::Gsd));
-    }
-
-    #[test]
-    fn critical_emoji_gsd() {
-        assert_eq!(BarStyle::Gsd.critical_emoji(), Some("💀"));
-    }
-
-    #[test]
-    fn critical_emoji_gradient() {
-        assert_eq!(BarStyle::Gradient.critical_emoji(), Some("🔥"));
-    }
-
-    #[test]
-    fn critical_emoji_plain_none() {
-        assert_eq!(BarStyle::Plain.critical_emoji(), None);
-    }
-
-    #[test]
-    fn critical_emoji_rainbow_none() {
-        assert_eq!(BarStyle::Rainbow.critical_emoji(), None);
     }
 
     #[test]
