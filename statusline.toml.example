@@ -1,8 +1,0 @@
-# statusline.toml — Claude Code Statusline configuration
-# Place alongside the statusline binary (~/.claude/statusline.toml)
-# All fields are optional. Shown values are defaults.
-#
-# cost = true               # show cost tracker [true|false]
-# messages = false          # show context messages [true|false]
-# messages_language = "en"  # message language ["en"|"pt"|"es"]
-# usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"]

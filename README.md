@@ -28,11 +28,13 @@ Install with one command. Works immediately. Configure when you need it.
 ## ✨ Quick Install
 
 **macOS / Linux / WSL**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash
 ```
 
 **Windows — PowerShell**
+
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1)))
 ```
@@ -79,18 +81,6 @@ curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/
 
 Release tags are listed on the [GitHub releases page](https://github.com/glauberlima/claude-code-statusline/releases).
 
-## 📥 Direct Downloads
-
-Pre-built binaries are published with every release. These URLs always point to the latest version:
-
-| Platform | URL |
-|----------|-----|
-| macOS (universal) | [`statusline-macos`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-macos) |
-| Linux x64 | [`statusline-linux-x64`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-linux-x64) |
-| Windows x64 | [`statusline-windows-x64.exe`](https://github.com/glauberlima/claude-code-statusline/releases/latest/download/statusline-windows-x64.exe) |
-
-The install scripts above use these URLs automatically.
-
 ## Features
 
 - 📁 **Directory name**
@@ -105,11 +95,13 @@ The install scripts above use these URLs automatically.
 Edit `~/.claude/statusline.toml` to customize features. Generate the default config:
 
 **macOS / Linux / WSL**
+
 ```bash
 ~/.claude/statusline --print-defaults > ~/.claude/statusline.toml
 ```
 
 **Windows — PowerShell**
+
 ```powershell
 & "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
 ```
