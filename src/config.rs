@@ -53,11 +53,6 @@ impl<'de> Deserialize<'de> for BarStyle {
     }
 }
 
-impl BarStyle {
-    pub fn blink_at_critical(&self) -> bool {
-        matches!(self, BarStyle::Gsd | BarStyle::Gradient)
-    }
-}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Language {
@@ -628,14 +623,6 @@ usage_bar_style = "rainbow"
     fn gsd_bar_style_deserializes() {
         let c: Config = toml::from_str(r#"usage_bar_style = "gsd""#).unwrap();
         assert!(matches!(c.usage_bar_style, BarStyle::Gsd));
-    }
-
-    #[test]
-    fn blink_at_critical() {
-        assert!(BarStyle::Gsd.blink_at_critical());
-        assert!(BarStyle::Gradient.blink_at_critical());
-        assert!(!BarStyle::Plain.blink_at_critical());
-        assert!(!BarStyle::Rainbow.blink_at_critical());
     }
 
     #[test]

@@ -72,11 +72,12 @@ pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, messa
     let usage = format_number(input.current_usage);
     let size = format_number(input.context_size);
 
-    let emoji_char = if pct >= 96 { Some("💀") } else if pct >= 86 { Some("🔥") } else { None };
-    let emoji = match emoji_char {
-        Some(e) if config.usage_bar_style.blink_at_critical() => format!("\x1b[5m{e}\x1b[25m"),
-        Some(e) => e.to_string(),
-        None => "📊".to_string(),
+    let emoji = if pct >= 96 {
+        "💀".to_string()
+    } else if pct >= 86 {
+        format!("\x1b[5m🔥\x1b[25m")
+    } else {
+        "📊".to_string()
     };
 
     let bar_and_pct = format!("{bar}{GRAY}]{NC} {pct}%");
@@ -431,23 +432,24 @@ mod tests {
     }
 
     #[test]
-    fn context_gsd_fire_blinks_at_critical() {
+    fn context_fire_blinks_all_styles() {
         let mut input = default_input();
         input.context_percent = 90;
-        let mut cfg = default_config();
-        cfg.usage_bar_style = BarStyle::Gsd;
-        let out = build_context(&input, &cfg, 0, 0);
-        assert!(out.contains("\x1b[5m🔥\x1b[25m"), "gsd at 90% must blink 🔥: {out:?}");
+        for style in [BarStyle::Plain, BarStyle::Rainbow, BarStyle::Gradient, BarStyle::Gsd] {
+            let mut cfg = default_config();
+            cfg.usage_bar_style = style;
+            let out = build_context(&input, &cfg, 0, 0);
+            assert!(out.contains("\x1b[5m🔥\x1b[25m"), "{style:?} at 90% must blink 🔥: {out:?}");
+        }
     }
 
     #[test]
-    fn context_gsd_skull_blinks_at_96() {
+    fn context_skull_does_not_blink() {
         let mut input = default_input();
         input.context_percent = 96;
-        let mut cfg = default_config();
-        cfg.usage_bar_style = BarStyle::Gsd;
-        let out = build_context(&input, &cfg, 0, 0);
-        assert!(out.contains("\x1b[5m💀\x1b[25m"), "gsd at 96% must blink 💀: {out:?}");
+        let out = build_context(&input, &default_config(), 0, 0);
+        assert!(out.contains("💀"), "96% must show 💀: {out}");
+        assert!(!out.contains("\x1b[5m"), "96% must not blink: {out:?}");
     }
 
     #[test]
@@ -472,15 +474,6 @@ mod tests {
         assert!(!out.contains("📊"), "gradient critical must not show 📊: {out}");
     }
 
-    #[test]
-    fn context_gradient_critical_blinks() {
-        let mut input = default_input();
-        input.context_percent = 90;
-        let mut cfg = default_config();
-        cfg.usage_bar_style = BarStyle::Gradient;
-        let out = build_context(&input, &cfg, 0, 0);
-        assert!(out.contains("\x1b[5m🔥\x1b[25m"), "gradient critical must blink the fire emoji: {out:?}");
-    }
 
     #[test]
     fn context_plain_fire_at_critical() {
