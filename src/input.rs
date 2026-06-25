@@ -4,9 +4,9 @@ use serde::Deserialize;
 pub struct ClaudeInput {
     pub model_name: String,
     pub current_dir: String,
-    pub context_size: u32,
-    pub current_usage: u32,
-    pub context_percent: u8,
+    pub context_size: Option<u32>,
+    pub current_usage: Option<u32>,
+    pub context_percent: Option<u8>,
     pub cost_usd: f64,
 }
 
@@ -72,17 +72,16 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
     };
 
     let cw = raw.context_window.as_ref();
-    let context_size = cw.and_then(|c| c.context_window_size).unwrap_or(200_000);
 
-    let usage = cw.and_then(|c| c.current_usage.as_ref());
-    let current_usage = usage
-        .map(|u| {
-            u.input_tokens.unwrap_or(0)
-                + u.output_tokens.unwrap_or(0)
-                + u.cache_creation_input_tokens.unwrap_or(0)
-                + u.cache_read_input_tokens.unwrap_or(0)
-        })
-        .unwrap_or(0);
+    let current_usage = cw.and_then(|c| c.current_usage.as_ref()).map(|u| {
+        u.input_tokens.unwrap_or(0)
+            + u.output_tokens.unwrap_or(0)
+            + u.cache_creation_input_tokens.unwrap_or(0)
+            + u.cache_read_input_tokens.unwrap_or(0)
+    });
+
+    // Context window display: scale used% to the usable range.
+    let context_size = cw.and_then(|c| c.context_window_size);
 
     // Context window display: scale used% to the usable range.
     // Claude Code reserves ~16.5% of the total window as an autocompact buffer.
@@ -97,8 +96,7 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         .map(|r| {
             let usable_remaining = ((r - AUTO_COMPACT_BUFFER_PCT) / (100.0 - AUTO_COMPACT_BUFFER_PCT) * 100.0).max(0.0);
             (100.0 - usable_remaining).round().clamp(0.0, 100.0) as u8
-        })
-        .unwrap_or(0);
+        });
 
     let cost_usd = raw
         .cost
@@ -172,13 +170,13 @@ mod tests {
     #[test]
     fn computes_context_percent() {
         let r = parse(MINIMAL).unwrap();
-        assert_eq!(r.context_percent, 34); // normalized: (72 - 16.5) / 83.5 * 100 → 66.47% remaining → 34% used
+        assert_eq!(r.context_percent, Some(34)); // normalized: (72 - 16.5) / 83.5 * 100 → 66.47% remaining → 34% used
     }
 
     #[test]
     fn computes_current_usage_sum() {
         let r = parse(MINIMAL).unwrap();
-        assert_eq!(r.current_usage, 1500); // 1000 + 500
+        assert_eq!(r.current_usage, Some(1500)); // 1000 + 500
     }
 
     #[test]

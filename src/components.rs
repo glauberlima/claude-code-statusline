@@ -67,10 +67,14 @@ pub fn build_files(changed: u32) -> String {
 }
 
 pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, message_time: u64) -> String {
-    let pct = input.context_percent;
+    let (Some(pct), Some(current_usage), Some(context_size)) =
+        (input.context_percent, input.current_usage, input.context_size)
+    else {
+        return String::new();
+    };
     let bar = build_usage_bar(pct, config.usage_bar_style, wave_time);
-    let usage = format_number(input.current_usage);
-    let size = format_number(input.context_size);
+    let usage = format_number(current_usage);
+    let size = format_number(context_size);
 
     let emoji = if pct >= 96 {
         "💀".to_string()
@@ -221,9 +225,9 @@ mod tests {
         ClaudeInput {
             model_name: "Sonnet 4.6".to_string(),
             current_dir: "/tmp/test".to_string(),
-            context_size: 200_000,
-            current_usage: 28_000,
-            context_percent: 14,
+            context_size: Some(200_000),
+            current_usage: Some(28_000),
+            context_percent: Some(14),
             cost_usd: 1.23,
         }
     }
@@ -421,7 +425,7 @@ mod tests {
     #[test]
     fn context_skull_at_96_all_styles() {
         let mut input = default_input();
-        input.context_percent = 96;
+        input.context_percent = Some(96);
         for style in [BarStyle::Plain, BarStyle::Rainbow, BarStyle::Gradient, BarStyle::Gsd] {
             let mut cfg = default_config();
             cfg.usage_bar_style = style;
@@ -434,7 +438,7 @@ mod tests {
     #[test]
     fn context_fire_blinks_all_styles() {
         let mut input = default_input();
-        input.context_percent = 90;
+        input.context_percent = Some(90);
         for style in [BarStyle::Plain, BarStyle::Rainbow, BarStyle::Gradient, BarStyle::Gsd] {
             let mut cfg = default_config();
             cfg.usage_bar_style = style;
@@ -446,7 +450,7 @@ mod tests {
     #[test]
     fn context_skull_does_not_blink() {
         let mut input = default_input();
-        input.context_percent = 96;
+        input.context_percent = Some(96);
         let out = build_context(&input, &default_config(), 0, 0);
         assert!(out.contains("💀"), "96% must show 💀: {out}");
         assert!(!out.contains("\x1b[5m"), "96% must not blink: {out:?}");
@@ -455,7 +459,7 @@ mod tests {
     #[test]
     fn context_gsd_non_critical_shows_chart() {
         let mut input = default_input();
-        input.context_percent = 50; // Medium tier
+        input.context_percent = Some(50); // Medium tier
         let mut cfg = default_config();
         cfg.usage_bar_style = BarStyle::Gsd;
         let out = build_context(&input, &cfg, 0, 0);
@@ -466,7 +470,7 @@ mod tests {
     #[test]
     fn context_gradient_critical_shows_fire() {
         let mut input = default_input();
-        input.context_percent = 90;
+        input.context_percent = Some(90);
         let mut cfg = default_config();
         cfg.usage_bar_style = BarStyle::Gradient;
         let out = build_context(&input, &cfg, 0, 0);
@@ -478,7 +482,7 @@ mod tests {
     #[test]
     fn context_plain_fire_at_critical() {
         let mut input = default_input();
-        input.context_percent = 90;
+        input.context_percent = Some(90);
         let out = build_context(&input, &default_config(), 0, 0);
         assert!(out.contains("🔥"), "plain at 90% must show 🔥: {out}");
         assert!(!out.contains("📊"), "plain at 90% must not show 📊: {out}");
@@ -488,7 +492,7 @@ mod tests {
     #[test]
     fn context_below_critical_shows_chart() {
         let mut input = default_input();
-        input.context_percent = 85;
+        input.context_percent = Some(85);
         let out = build_context(&input, &default_config(), 0, 0);
         assert!(out.contains("📊"), "85% must show 📊: {out}");
         assert!(!out.contains("🔥"), "85% must not show 🔥: {out}");
