@@ -80,10 +80,8 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
             + u.cache_read_input_tokens.unwrap_or(0)
     });
 
-    // Context window display: scale used% to the usable range.
     let context_size = cw.and_then(|c| c.context_window_size);
 
-    // Context window display: scale used% to the usable range.
     // Claude Code reserves ~16.5% of the total window as an autocompact buffer.
     // We subtract that buffer before scaling so the bar reaches 100% exactly when
     // autocompact triggers, not when the raw window is exhausted.
