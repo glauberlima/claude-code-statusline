@@ -63,7 +63,7 @@ pub fn build_files(changed: u32) -> String {
     if changed == 0 {
         return String::new();
     }
-    format!("✏️ {ORANGE}changes{NC}")
+    format!("✏️ {ORANGE}{changed} files{NC}")
 }
 
 pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, message_time: u64) -> String {
@@ -77,7 +77,7 @@ pub fn build_context(input: &ClaudeInput, config: &Config, wave_time: u64, messa
     let size = format_number(context_size);
 
     let emoji = if pct >= 96 {
-        "💀".to_string()
+        "\x1b[5m💀\x1b[25m".to_string()
     } else if pct >= 86 {
         "\x1b[5m🔥\x1b[25m".to_string()
     } else {
@@ -237,6 +237,14 @@ mod tests {
     }
 
     #[test]
+    fn directory_shows_last_path_segment() {
+        let input = default_input(); // current_dir = "/tmp/test"
+        let out = build_directory(&input);
+        assert!(out.contains("test"), "should show last segment: {out}");
+        assert!(out.contains("📁"), "should show dir icon: {out}");
+    }
+
+    #[test]
     fn model_contains_name() {
         let out = build_model(&default_input());
         assert!(out.contains("Sonnet 4.6"));
@@ -338,7 +346,8 @@ mod tests {
     #[test]
     fn files_shows_changes_icon() {
         let out = build_files(3);
-        assert!(out.contains("changes"));
+        assert!(out.contains("3"));
+        assert!(out.contains("files"));
         assert!(out.contains("✏️"));
     }
 
@@ -431,6 +440,7 @@ mod tests {
             cfg.usage_bar_style = style;
             let out = build_context(&input, &cfg, 0, 0);
             assert!(out.contains("💀"), "{style:?} at 96% must show 💀: {out}");
+            assert!(out.contains("\x1b[5m"), "{style:?} at 96% 💀 must blink: {out:?}");
             assert!(!out.contains("📊"), "{style:?} at 96% must not show 📊: {out}");
         }
     }
@@ -448,12 +458,11 @@ mod tests {
     }
 
     #[test]
-    fn context_skull_does_not_blink() {
+    fn context_skull_blinks() {
         let mut input = default_input();
         input.context_percent = Some(96);
         let out = build_context(&input, &default_config(), 0, 0);
-        assert!(out.contains("💀"), "96% must show 💀: {out}");
-        assert!(!out.contains("\x1b[5m"), "96% must not blink: {out:?}");
+        assert!(out.contains("\x1b[5m💀\x1b[25m"), "96% must blink 💀: {out:?}");
     }
 
     #[test]

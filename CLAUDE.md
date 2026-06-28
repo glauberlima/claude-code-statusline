@@ -98,7 +98,7 @@ All fields are optional. Shown values are defaults.
 
 **Context window display:** The progress bar is scaled against the *usable* portion of the context window. Claude Code reserves ~16.5% as an autocompact buffer; the bar reaches 100% when autocompact triggers, not when the raw window is exhausted. Formula: `used = round((1 - max(0, remaining - 16.5) / 83.5) * 100)`.
 
-**Blink at Critical (`gsd` and `gradient` styles):** At Critical tier (≥86%), the emoji (💀 or 🔥) blinks via ANSI SGR 5 (`\x1b[5m`). This works in iTerm2, macOS Terminal, and kitty. **Ghostty does not render SGR 5 text blink** by design — the emoji appears without blinking. This is a known Ghostty limitation ([discussion #4258](https://github.com/ghostty-org/ghostty/discussions/4258)), not a bug in this binary.
+**Blink at Critical (all bar styles):** At ≥86% the 🔥 emoji blinks via ANSI SGR 5 (`\x1b[5m`). At ≥96% the 💀 emoji blinks as well (same SGR 5 codes). Both apply regardless of `usage_bar_style`. This works in iTerm2, macOS Terminal, and kitty. **Ghostty does not render SGR 5 text blink** by design — the emoji appears without blinking. This is a known Ghostty limitation ([discussion #4258](https://github.com/ghostty-org/ghostty/discussions/4258)), not a bug in this binary.
 
 ## Security
 
