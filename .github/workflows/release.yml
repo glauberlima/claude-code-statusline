@@ -113,8 +113,10 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
+          RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
           touch CHANGELOG.md
-          git cliff --tag "$TAG" --unreleased --prepend CHANGELOG.md
+          git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --prepend CHANGELOG.md
 
       - name: Bump Cargo.toml version
         if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
