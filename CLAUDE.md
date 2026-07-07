@@ -69,10 +69,10 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 | `src/main.rs` | Entry point: `--print-defaults`, `--version`, `--configure-settings` flags or parse→build→render pipeline |
 | `src/configure.rs` | `--configure-settings <settings_path> <command_path>` — reads/merges/writes `~/.claude/settings.json` atomically |
 | `src/input.rs` | JSON parsing via `serde_json`; `validate_directory()` for security |
-| `src/config.rs` | TOML config loading; `BarStyle`/`Language` enums with fallback warnings; `print_defaults()` |
+| `src/config.rs` | TOML config loading; `BarStyle`/`Language`/`Theme` enums with fallback warnings; `print_defaults()` |
 | `src/git.rs` | Single `git status --porcelain=v2 --branch --untracked-files=all` call; `parse_porcelain_v2()` |
-| `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_cost`); `build_all()` orchestrator |
-| `src/render.rs` | ANSI color constants, `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
+| `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_cost`), each taking a `&Palette`; `build_all()` orchestrator |
+| `src/render.rs` | ANSI color constants, `Palette`/`build_palette()` (theme → semantic colors), `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
 | `tests/integration.rs` | End-to-end tests spawning the compiled binary with fixture JSON |
 
 ### Key Design Decisions
@@ -82,6 +82,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 - **`--print-defaults`**: Prints commented TOML defaults to stdout. Used by installers to seed `statusline.toml`.
 - **`--configure-settings <settings_path> <command_path>`**: Reads `settings.json`, backs it up, merges the `statusLine` key, and writes atomically. Used by installers instead of external JSON tooling.
 - **No runtime overhead from i18n**: Messages are compiled-in static string slices in `config.rs`.
+- **Themes only recolor the 6 semantic colors**: `blue`/`magenta`/`orange`/`cyan`/`green`/`red` (directory, git, files, model, cost, context tier for the `plain` bar style). `theme = "default"` reuses the original 16-color ANSI constants; other themes use truecolor (`\x1b[38;2;r;g;bm`) matching official palettes. `rainbow`/`gradient` bar styles and the `gsd` bar style's tier colors are intentionally unaffected by `theme` — they keep their own fixed 256-color palettes.
 
 ## Configuration
 
@@ -92,6 +93,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 # messages = false          # show context messages [true|false]
 # messages_language = "en"  # message language ["en"|"pt"|"es"]
 # usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"|"gsd"]
+# theme = "default"         # color theme ["default"|"dracula"|"tokyo-night"|"one-dark"|"solarized-dark"]
 ```
 
 All fields are optional. Shown values are defaults.
@@ -133,11 +135,11 @@ Test fixtures in `tests/fixtures/`:
 1. Add a builder function to `src/components.rs`:
 
 ```rust
-pub fn build_new_component(input: &ClaudeInput) -> String {
+pub fn build_new_component(input: &ClaudeInput, palette: &Palette) -> String {
     if condition {
         return String::new();
     }
-    format!("🆕 {CYAN}{}{NC}", input.some_field)
+    format!("🆕 {}{}{NC}", palette.cyan, input.some_field)
 }
 ```
 
@@ -150,14 +152,15 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
     } else {
         0
     };
+    let palette = build_palette(config.theme);
     vec![
-        build_directory(input),
-        build_git(git),
-        build_files(git.changed_files),
-        build_model(input),
-        build_context(input, config, wave_time),
-        build_cost(input.cost_usd, config),
-        build_new_component(input),  // add here
+        build_directory(input, &palette),
+        build_git(git, &palette),
+        build_files(git.changed_files, &palette),
+        build_model(input, &palette),
+        build_context(input, config, &palette, wave_time, message_time),
+        build_cost(input.cost_usd, config, &palette),
+        build_new_component(input, &palette),  // add here
     ]
 }
 ```

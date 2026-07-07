@@ -89,6 +89,7 @@ Release tags are listed on the [GitHub releases page](https://github.com/glauber
 - 🤖 **Model name**
 - 📊 **Context usage** with progress bar and funny messages
 - 💰 **Cost tracking**
+- 🎨 **Color themes** (Dracula, Tokyo Night, One Dark, Solarized Dark)
 
 ## ⚙️ Configuration
 
@@ -106,7 +107,23 @@ Edit `~/.claude/statusline.toml` to customize features. Generate the default con
 & "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
 ```
 
-Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`/`gsd`).
+Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`/`gsd`), `theme` (`default`/`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`).
+
+### 🎨 Themes
+
+`theme` recolors the directory, git branch, file changes, model, cost, and context (`plain` bar style only) segments using the official palette of the selected theme. The `rainbow`, `gradient`, and `gsd` bar styles are unaffected by `theme` — they always use their own fixed colors.
+
+| Theme | Source palette |
+|-------|----------------|
+| `default` | Original 16-color ANSI (no theme applied) |
+| `dracula` | [Dracula](https://draculatheme.com/) |
+| `tokyo-night` | [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) |
+| `one-dark` | [Atom One Dark](https://github.com/atom/atom/tree/master/packages/one-dark-ui) |
+| `solarized-dark` | [Solarized Dark](https://ethanschoonover.com/solarized/) |
+
+```toml
+theme = "dracula"
+```
 
 ## 🛠️ Development
 

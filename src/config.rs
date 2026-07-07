@@ -10,6 +10,8 @@ pub struct Config {
     pub messages_language: Language,
     #[serde(default)]
     pub usage_bar_style: BarStyle,
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Default for Config {
@@ -19,6 +21,7 @@ impl Default for Config {
             cost: true,
             messages_language: Language::En,
             usage_bar_style: BarStyle::Plain,
+            theme: Theme::Default,
         }
     }
 }
@@ -53,6 +56,33 @@ impl<'de> Deserialize<'de> for BarStyle {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Theme {
+    #[default]
+    Default,
+    Dracula,
+    TokyoNight,
+    OneDark,
+    SolarizedDark,
+}
+
+impl<'de> Deserialize<'de> for Theme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "default" => Ok(Theme::Default),
+            "dracula" => Ok(Theme::Dracula),
+            "tokyo-night" => Ok(Theme::TokyoNight),
+            "one-dark" => Ok(Theme::OneDark),
+            "solarized-dark" => Ok(Theme::SolarizedDark),
+            other => {
+                eprintln!("statusline: unknown theme \"{other}\", using \"default\"");
+                Ok(Theme::Default)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Language {
@@ -108,6 +138,7 @@ pub fn print_defaults() -> String {
         "# messages = false          # show context messages [true|false]",
         "# messages_language = \"en\"  # message language [\"en\"|\"pt\"|\"es\"]",
         "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]",
+        "# theme = \"default\"        # color theme [\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"]",
     ]
     .join("\n")
         + "\n"
@@ -536,6 +567,7 @@ mod tests {
         assert!(c.cost);
         assert!(matches!(c.usage_bar_style, BarStyle::Plain));
         assert!(matches!(c.messages_language, Language::En));
+        assert!(matches!(c.theme, Theme::Default));
     }
 
     #[test]
@@ -545,12 +577,14 @@ messages = true
 cost = false
 messages_language = "pt"
 usage_bar_style = "rainbow"
+theme = "dracula"
 "#;
         let c: Config = toml::from_str(toml_str).unwrap();
         assert!(c.messages);
         assert!(!c.cost);
         assert!(matches!(c.messages_language, Language::Pt));
         assert!(matches!(c.usage_bar_style, BarStyle::Rainbow));
+        assert!(matches!(c.theme, Theme::Dracula));
     }
 
     #[test]
@@ -574,6 +608,7 @@ usage_bar_style = "rainbow"
         assert!(c.cost);
         assert!(matches!(c.usage_bar_style, BarStyle::Plain));
         assert!(matches!(c.messages_language, Language::En));
+        assert!(matches!(c.theme, Theme::Default));
     }
 
     #[test]
@@ -601,8 +636,10 @@ usage_bar_style = "rainbow"
         assert!(out.contains("messages = false"));
         assert!(out.contains("messages_language = \"en\""));
         assert!(out.contains("usage_bar_style = \"plain\""));
+        assert!(out.contains("theme = \"default\""));
         assert!(out.contains("[true|false]"));
         assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]"));
+        assert!(out.contains("[\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"]"));
     }
 
     #[test]
@@ -629,5 +666,27 @@ usage_bar_style = "rainbow"
     fn print_defaults_contains_gsd() {
         let out = print_defaults();
         assert!(out.contains("\"gsd\""), "print_defaults must list gsd option");
+    }
+
+    #[test]
+    fn unknown_theme_falls_back_to_default() {
+        let toml_str = r#"theme = "neon""#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert!(matches!(c.theme, Theme::Default));
+    }
+
+    #[test]
+    fn all_themes_deserialize() {
+        for (raw, expected) in [
+            ("default", Theme::Default),
+            ("dracula", Theme::Dracula),
+            ("tokyo-night", Theme::TokyoNight),
+            ("one-dark", Theme::OneDark),
+            ("solarized-dark", Theme::SolarizedDark),
+        ] {
+            let toml_str = format!(r#"theme = "{raw}""#);
+            let c: Config = toml::from_str(&toml_str).unwrap();
+            assert_eq!(c.theme, expected, "theme \"{raw}\" did not deserialize correctly");
+        }
     }
 }
