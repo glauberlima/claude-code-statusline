@@ -83,6 +83,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 - **`--configure-settings <settings_path> <command_path>`**: Reads `settings.json`, backs it up, merges the `statusLine` key, and writes atomically. Used by installers instead of external JSON tooling.
 - **No runtime overhead from i18n**: Messages are compiled-in static string slices in `config.rs`.
 - **Themes only recolor the 6 semantic colors**: `blue`/`magenta`/`orange`/`cyan`/`green`/`red` (directory, git, files, model, cost, context tier for the `plain` bar style). `theme = "default"` reuses the original 16-color ANSI constants; other themes use truecolor (`\x1b[38;2;r;g;bm`) matching official palettes. `rainbow`/`gradient` bar styles and the `gsd` bar style's tier colors are intentionally unaffected by `theme` — they keep their own fixed 256-color palettes.
+- **`usage_bar_style` also has a variant per theme** (`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`/`phosphor`): renders the bar as a gradient across that theme's 6 semantic colors via `fill_theme_gradient()` in `src/components.rs`, which calls `build_palette()` directly — fully independent of the active `theme` config value (same pattern as `gradient`/`gsd` being independent of `theme`).
 
 ## Configuration
 
@@ -93,7 +94,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 # messages = false          # show context messages [true|false]
 # messages_language = "en"  # message language ["en"|"pt"|"es"]
 # usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"|"gsd"]
-# theme = "default"         # color theme ["default"|"dracula"|"tokyo-night"|"one-dark"|"solarized-dark"]
+# theme = "default"         # color theme ["default"|"dracula"|"tokyo-night"|"one-dark"|"solarized-dark"|"phosphor"]
 ```
 
 All fields are optional. Shown values are defaults.

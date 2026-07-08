@@ -68,6 +68,15 @@ pub fn build_palette(theme: Theme) -> Palette {
             green: truecolor(133, 153, 0),     // #859900
             red: truecolor(220, 50, 47),       // #dc322f
         },
+        // P1 phosphor CRT green, with amber/red accents borrowed from period terminal alert colors
+        Theme::Phosphor => Palette {
+            blue: truecolor(51, 255, 51),      // #33ff33 bright phosphor green
+            magenta: truecolor(255, 176, 0),   // #ffb000 amber (VT100/PLATO alert color)
+            orange: truecolor(102, 255, 102),  // #66ff66 soft phosphor green
+            cyan: truecolor(153, 255, 153),    // #99ff99 pale phosphor green
+            green: truecolor(0, 204, 0),       // #00cc00 deep phosphor green
+            red: truecolor(255, 51, 51),       // #ff3333 alarm red
+        },
     }
 }
 
@@ -114,7 +123,13 @@ mod tests {
 
     #[test]
     fn themed_palettes_use_truecolor_escapes() {
-        for theme in [Theme::Dracula, Theme::TokyoNight, Theme::OneDark, Theme::SolarizedDark] {
+        for theme in [
+            Theme::Dracula,
+            Theme::TokyoNight,
+            Theme::OneDark,
+            Theme::SolarizedDark,
+            Theme::Phosphor,
+        ] {
             let p = build_palette(theme);
             for color in [&p.blue, &p.magenta, &p.orange, &p.cyan, &p.green, &p.red] {
                 assert!(color.starts_with("\x1b[38;2;"), "{theme:?} color not truecolor: {color:?}");

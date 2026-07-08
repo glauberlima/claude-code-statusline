@@ -1,4 +1,4 @@
-use crate::config::{BarStyle, Config, ContextTier, get_messages};
+use crate::config::{BarStyle, Config, ContextTier, Theme, get_messages};
 use crate::git::{GitInfo, GitState};
 use crate::input::ClaudeInput;
 use crate::render::{
@@ -169,6 +169,33 @@ fn fill_gradient(filled: usize, _percent: u8, _wave_time: u64) -> String {
     s
 }
 
+fn fill_theme_gradient(filled: usize, theme: Theme) -> String {
+    if filled == 0 {
+        return String::new();
+    }
+    let theme_palette = build_palette(theme);
+    let colors = [
+        &theme_palette.blue,
+        &theme_palette.magenta,
+        &theme_palette.orange,
+        &theme_palette.cyan,
+        &theme_palette.green,
+        &theme_palette.red,
+    ];
+    let mut s = String::new();
+    for i in 0..filled {
+        let idx = if BAR_WIDTH > 1 {
+            i * (colors.len() - 1) / (BAR_WIDTH - 1)
+        } else {
+            0
+        };
+        s.push_str(colors[idx]);
+        s.push_str(BAR_FILLED);
+    }
+    s.push_str(NC);
+    s
+}
+
 fn fill_gsd(filled: usize, percent: u8, _wave_time: u64) -> String {
     let color = match ContextTier::from_percent(percent) {
         ContextTier::VeryLow | ContextTier::Low => GREEN,
@@ -189,6 +216,11 @@ pub fn build_usage_bar(percent: u8, style: BarStyle, palette: &Palette, wave_tim
         BarStyle::Rainbow => fill_rainbow(filled, percent, wave_time),
         BarStyle::Gradient => fill_gradient(filled, percent, wave_time),
         BarStyle::Gsd => fill_gsd(filled, percent, wave_time),
+        BarStyle::Dracula => fill_theme_gradient(filled, Theme::Dracula),
+        BarStyle::TokyoNight => fill_theme_gradient(filled, Theme::TokyoNight),
+        BarStyle::OneDark => fill_theme_gradient(filled, Theme::OneDark),
+        BarStyle::SolarizedDark => fill_theme_gradient(filled, Theme::SolarizedDark),
+        BarStyle::Phosphor => fill_theme_gradient(filled, Theme::Phosphor),
     };
 
     let mut bar = colored;
@@ -443,10 +475,45 @@ mod tests {
     }
 
     #[test]
+    fn theme_bar_empty_has_no_color_codes() {
+        let bar = build_usage_bar(0, BarStyle::Phosphor, &default_palette(), 0);
+        assert_eq!(bar.chars().filter(|&c| c == '░').count(), 15);
+        assert!(!bar.contains("\x1b[38;2;"));
+    }
+
+    #[test]
+    fn theme_bar_full_uses_theme_palette() {
+        let phosphor = crate::render::build_palette(crate::config::Theme::Phosphor);
+        let bar = build_usage_bar(100, BarStyle::Phosphor, &default_palette(), 0);
+        assert!(bar.contains('█'));
+        assert!(bar.contains(&phosphor.blue), "first color must be theme's blue: {bar:?}");
+        assert!(bar.contains(&phosphor.red), "last color must be theme's red: {bar:?}");
+    }
+
+    #[test]
+    fn theme_bar_ignores_active_theme() {
+        // usage_bar_style = "dracula" must render dracula colors regardless of theme config
+        let dracula = crate::render::build_palette(crate::config::Theme::Dracula);
+        let solarized_active_palette = crate::render::build_palette(crate::config::Theme::SolarizedDark);
+        let bar = build_usage_bar(100, BarStyle::Dracula, &solarized_active_palette, 0);
+        assert!(bar.contains(&dracula.blue), "bar must use dracula palette, not active theme: {bar:?}");
+    }
+
+    #[test]
     fn context_skull_at_96_all_styles() {
         let mut input = default_input();
         input.context_percent = Some(96);
-        for style in [BarStyle::Plain, BarStyle::Rainbow, BarStyle::Gradient, BarStyle::Gsd] {
+        for style in [
+            BarStyle::Plain,
+            BarStyle::Rainbow,
+            BarStyle::Gradient,
+            BarStyle::Gsd,
+            BarStyle::Dracula,
+            BarStyle::TokyoNight,
+            BarStyle::OneDark,
+            BarStyle::SolarizedDark,
+            BarStyle::Phosphor,
+        ] {
             let mut cfg = default_config();
             cfg.usage_bar_style = style;
             let out = build_context(&input, &cfg, &default_palette(), 0, 0);
@@ -460,7 +527,17 @@ mod tests {
     fn context_fire_blinks_all_styles() {
         let mut input = default_input();
         input.context_percent = Some(90);
-        for style in [BarStyle::Plain, BarStyle::Rainbow, BarStyle::Gradient, BarStyle::Gsd] {
+        for style in [
+            BarStyle::Plain,
+            BarStyle::Rainbow,
+            BarStyle::Gradient,
+            BarStyle::Gsd,
+            BarStyle::Dracula,
+            BarStyle::TokyoNight,
+            BarStyle::OneDark,
+            BarStyle::SolarizedDark,
+            BarStyle::Phosphor,
+        ] {
             let mut cfg = default_config();
             cfg.usage_bar_style = style;
             let out = build_context(&input, &cfg, &default_palette(), 0, 0);

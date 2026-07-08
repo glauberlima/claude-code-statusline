@@ -89,7 +89,7 @@ Release tags are listed on the [GitHub releases page](https://github.com/glauber
 - 🤖 **Model name**
 - 📊 **Context usage** with progress bar and funny messages
 - 💰 **Cost tracking**
-- 🎨 **Color themes** (Dracula, Tokyo Night, One Dark, Solarized Dark)
+- 🎨 **Color themes** (Dracula, Tokyo Night, One Dark, Solarized Dark, Phosphor)
 
 ## ⚙️ Configuration
 
@@ -107,11 +107,11 @@ Edit `~/.claude/statusline.toml` to customize features. Generate the default con
 & "$env:USERPROFILE\.claude\statusline.exe" --print-defaults | Set-Content "$env:USERPROFILE\.claude\statusline.toml"
 ```
 
-Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`/`gsd`), `theme` (`default`/`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`).
+Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `usage_bar_style` (`plain`/`rainbow`/`gradient`/`gsd`/`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`/`phosphor`), `theme` (`default`/`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`/`phosphor`).
 
 ### 🎨 Themes
 
-`theme` recolors the directory, git branch, file changes, model, cost, and context (`plain` bar style only) segments using the official palette of the selected theme. The `rainbow`, `gradient`, and `gsd` bar styles are unaffected by `theme` — they always use their own fixed colors.
+`theme` recolors the directory, git branch, file changes, model, cost, and context (`plain` bar style only) segments using the official palette of the selected theme. The `rainbow` and `gsd` bar styles are unaffected by `theme` — they always use their own fixed colors. The `gradient` and per-theme bar styles below are also independent of `theme` — pick them via `usage_bar_style` regardless of which `theme` is active.
 
 | Theme | Source palette |
 |-------|----------------|
@@ -120,9 +120,18 @@ Available options: `cost`, `messages`, `messages_language` (`en`/`pt`/`es`), `us
 | `tokyo-night` | [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) |
 | `one-dark` | [Atom One Dark](https://github.com/atom/atom/tree/master/packages/one-dark-ui) |
 | `solarized-dark` | [Solarized Dark](https://ethanschoonover.com/solarized/) |
+| `phosphor` | P1 phosphor CRT green (80s terminal) |
 
 ```toml
 theme = "dracula"
+```
+
+### 📊 Themed progress bars
+
+`usage_bar_style` also accepts each theme's name (`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`/`phosphor`), rendering the progress bar as a gradient across that theme's 6 semantic colors — independent of whichever `theme` is currently active. For example, `theme = "default"` with `usage_bar_style = "phosphor"` keeps default colors everywhere except a phosphor-green progress bar.
+
+```toml
+usage_bar_style = "phosphor"
 ```
 
 ## 🛠️ Development

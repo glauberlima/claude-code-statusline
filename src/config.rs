@@ -38,6 +38,11 @@ pub enum BarStyle {
     Rainbow,
     Gradient,
     Gsd,
+    Dracula,
+    TokyoNight,
+    OneDark,
+    SolarizedDark,
+    Phosphor,
 }
 
 impl<'de> Deserialize<'de> for BarStyle {
@@ -48,6 +53,11 @@ impl<'de> Deserialize<'de> for BarStyle {
             "rainbow" => Ok(BarStyle::Rainbow),
             "gradient" => Ok(BarStyle::Gradient),
             "gsd" => Ok(BarStyle::Gsd),
+            "dracula" => Ok(BarStyle::Dracula),
+            "tokyo-night" => Ok(BarStyle::TokyoNight),
+            "one-dark" => Ok(BarStyle::OneDark),
+            "solarized-dark" => Ok(BarStyle::SolarizedDark),
+            "phosphor" => Ok(BarStyle::Phosphor),
             other => {
                 eprintln!("statusline: unknown usage_bar_style \"{other}\", using \"plain\"");
                 Ok(BarStyle::Plain)
@@ -65,6 +75,7 @@ pub enum Theme {
     TokyoNight,
     OneDark,
     SolarizedDark,
+    Phosphor,
 }
 
 impl<'de> Deserialize<'de> for Theme {
@@ -76,6 +87,7 @@ impl<'de> Deserialize<'de> for Theme {
             "tokyo-night" => Ok(Theme::TokyoNight),
             "one-dark" => Ok(Theme::OneDark),
             "solarized-dark" => Ok(Theme::SolarizedDark),
+            "phosphor" => Ok(Theme::Phosphor),
             other => {
                 eprintln!("statusline: unknown theme \"{other}\", using \"default\"");
                 Ok(Theme::Default)
@@ -137,8 +149,8 @@ pub fn print_defaults() -> String {
         "# cost = true               # show cost tracker [true|false]",
         "# messages = false          # show context messages [true|false]",
         "# messages_language = \"en\"  # message language [\"en\"|\"pt\"|\"es\"]",
-        "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]",
-        "# theme = \"default\"        # color theme [\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"]",
+        "# usage_bar_style = \"plain\" # usage bar style [\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]",
+        "# theme = \"default\"        # color theme [\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]",
     ]
     .join("\n")
         + "\n"
@@ -638,8 +650,10 @@ theme = "dracula"
         assert!(out.contains("usage_bar_style = \"plain\""));
         assert!(out.contains("theme = \"default\""));
         assert!(out.contains("[true|false]"));
-        assert!(out.contains("[\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"]"));
-        assert!(out.contains("[\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"]"));
+        assert!(out.contains(
+            "[\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]"
+        ));
+        assert!(out.contains("[\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]"));
     }
 
     #[test]
@@ -663,6 +677,20 @@ theme = "dracula"
     }
 
     #[test]
+    fn theme_bar_styles_deserialize() {
+        let c: Config = toml::from_str(r#"usage_bar_style = "dracula""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::Dracula));
+        let c: Config = toml::from_str(r#"usage_bar_style = "tokyo-night""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::TokyoNight));
+        let c: Config = toml::from_str(r#"usage_bar_style = "one-dark""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::OneDark));
+        let c: Config = toml::from_str(r#"usage_bar_style = "solarized-dark""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::SolarizedDark));
+        let c: Config = toml::from_str(r#"usage_bar_style = "phosphor""#).unwrap();
+        assert!(matches!(c.usage_bar_style, BarStyle::Phosphor));
+    }
+
+    #[test]
     fn print_defaults_contains_gsd() {
         let out = print_defaults();
         assert!(out.contains("\"gsd\""), "print_defaults must list gsd option");
@@ -683,6 +711,7 @@ theme = "dracula"
             ("tokyo-night", Theme::TokyoNight),
             ("one-dark", Theme::OneDark),
             ("solarized-dark", Theme::SolarizedDark),
+            ("phosphor", Theme::Phosphor),
         ] {
             let toml_str = format!(r#"theme = "{raw}""#);
             let c: Config = toml::from_str(&toml_str).unwrap();
