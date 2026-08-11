@@ -33,7 +33,6 @@ struct RawWorkspace {
 #[derive(Deserialize)]
 struct RawContextWindow {
     context_window_size: Option<u32>,
-    remaining_percentage: Option<f64>,
     current_usage: Option<RawUsage>,
 }
 
@@ -82,19 +81,20 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
 
     let context_size = cw.and_then(|c| c.context_window_size);
 
-    // Claude Code reserves ~16.5% of the total window as an autocompact buffer.
-    // We subtract that buffer before scaling so the bar reaches 100% exactly when
-    // autocompact triggers, not when the raw window is exhausted.
-    //   usable_remaining = max(0, (remaining - 16.5) / 83.5 * 100)
-    //   used = round(100 - usable_remaining)
-    // Credit: normalization approach from gsd-statusline (https://github.com/open-gsd/gsd-core)
-    const AUTO_COMPACT_BUFFER_PCT: f64 = 16.5;
-    let context_percent = cw
-        .and_then(|c| c.remaining_percentage)
-        .map(|r| {
-            let usable_remaining = ((r - AUTO_COMPACT_BUFFER_PCT) / (100.0 - AUTO_COMPACT_BUFFER_PCT) * 100.0).max(0.0);
-            (100.0 - usable_remaining).round().clamp(0.0, 100.0) as u8
-        });
+    // Claude Code reserves a fixed token buffer for output generation (capped at
+    // 20,000 tokens) that isn't exposed in this JSON. We subtract that reserve
+    // before scaling so the bar reflects usage against the *usable* window, not
+    // the raw one. A fixed token amount (rather than a percentage) scales
+    // correctly across context window sizes: the reserve doesn't grow just
+    // because the window does.
+    const OUTPUT_RESERVE_TOKENS: f64 = 20_000.0;
+    let context_percent = match (current_usage, context_size) {
+        (Some(usage), Some(size)) => {
+            let usable = (size as f64 - OUTPUT_RESERVE_TOKENS).max(1.0);
+            Some(((usage as f64 / usable) * 100.0).round().clamp(0.0, 100.0) as u8)
+        }
+        _ => None,
+    };
 
     let cost_usd = raw
         .cost
@@ -148,7 +148,6 @@ mod tests {
         "workspace": {"current_dir": "/tmp/test"},
         "context_window": {
             "context_window_size": 200000,
-            "remaining_percentage": 72,
             "current_usage": {
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -168,13 +167,27 @@ mod tests {
     #[test]
     fn computes_context_percent() {
         let r = parse(MINIMAL).unwrap();
-        assert_eq!(r.context_percent, Some(34)); // normalized: (72 - 16.5) / 83.5 * 100 → 66.47% remaining → 34% used
+        assert_eq!(r.context_percent, Some(1)); // 1500 / (200000 - 20000) * 100 → 0.83% → 1% used
     }
 
     #[test]
     fn computes_current_usage_sum() {
         let r = parse(MINIMAL).unwrap();
         assert_eq!(r.current_usage, Some(1500)); // 1000 + 500
+    }
+
+    #[test]
+    fn does_not_saturate_early_near_the_reserve_boundary() {
+        let json = r#"{"context_window": {"context_window_size": 200000, "current_usage": {"input_tokens": 169000, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(r.context_percent, Some(94)); // 169000 / (200000 - 20000) * 100 → 93.9% → 94%, not 100%
+    }
+
+    #[test]
+    fn clamps_to_100_once_usage_exceeds_the_usable_window() {
+        let json = r#"{"context_window": {"context_window_size": 200000, "current_usage": {"input_tokens": 185000, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(r.context_percent, Some(100));
     }
 
     #[test]
