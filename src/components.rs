@@ -64,7 +64,8 @@ pub fn build_files(changed: u32, palette: &Palette) -> String {
     if changed == 0 {
         return String::new();
     }
-    format!("✏️ {}{changed} files{NC}", palette.orange)
+    let label = if changed == 1 { "file" } else { "files" };
+    format!("✏️ {}{changed} {label}{NC}", palette.orange)
 }
 
 pub fn build_context(
@@ -257,6 +258,7 @@ pub fn format_number(n: u32) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -392,6 +394,13 @@ mod tests {
         assert!(out.contains("3"));
         assert!(out.contains("files"));
         assert!(out.contains("✏️"));
+    }
+
+    #[test]
+    fn files_singular_when_one_change() {
+        let out = build_files(1, &default_palette());
+        assert!(out.contains("1 file"), "should show singular: {out}");
+        assert!(!out.contains("1 files"), "must not show plural for 1: {out}");
     }
 
     #[test]
