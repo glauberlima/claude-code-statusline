@@ -56,7 +56,8 @@ pub fn run(settings_path: &str, command_path: &str) -> anyhow::Result<()> {
     let tmp_path = format!("{settings_path}.tmp.{pid}");
     std::fs::write(&tmp_path, &serialized)
         .with_context(|| format!("statusline: failed to write temp file: {tmp_path}"))?;
-    if let Err(e) = std::fs::rename(&tmp_path, path) {
+    let real_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if let Err(e) = std::fs::rename(&tmp_path, &real_path) {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(e).with_context(|| {
             format!("statusline: failed to write settings.json: {settings_path}")
