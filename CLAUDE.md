@@ -51,7 +51,7 @@ cargo build && cp target/debug/statusline ~/.claude/statusline
 ### Linting
 
 ```bash
-cargo clippy -- -D warnings
+cargo clippy --all-targets -- -D warnings
 ```
 
 ## Architecture
@@ -69,10 +69,11 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 | `src/main.rs` | Entry point: `--print-defaults`, `--version`, `--configure-settings` flags or parse→build→render pipeline |
 | `src/configure.rs` | `--configure-settings <settings_path> <command_path>` — reads/merges/writes `~/.claude/settings.json` atomically |
 | `src/input.rs` | JSON parsing via `serde_json`; `validate_directory()` for security |
-| `src/config.rs` | TOML config loading; `BarStyle`/`Language` enums with fallback warnings; `print_defaults()` |
+| `src/config.rs` | TOML config loading; `BarStyle`/`Language`/`Theme` enums with fallback warnings; `print_defaults()` |
 | `src/git.rs` | Single `git status --porcelain=v2 --branch --untracked-files=all` call; `parse_porcelain_v2()` |
-| `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_cost`); `build_all()` orchestrator |
-| `src/render.rs` | ANSI color constants, `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
+| `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_cost`), each taking a `&Palette`; `build_all()` orchestrator |
+| `src/render.rs` | ANSI color constants, `Palette`/`build_palette()` (theme → semantic colors), `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
+| `src/debug_log.rs` | Debug-only (`#[cfg(debug_assertions)]`): appends raw stdin JSON to `~/.claude/statusline-debug.log` for troubleshooting |
 | `tests/integration.rs` | End-to-end tests spawning the compiled binary with fixture JSON |
 
 ### Key Design Decisions
@@ -82,6 +83,8 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 - **`--print-defaults`**: Prints commented TOML defaults to stdout. Used by installers to seed `statusline.toml`.
 - **`--configure-settings <settings_path> <command_path>`**: Reads `settings.json`, backs it up, merges the `statusLine` key, and writes atomically. Used by installers instead of external JSON tooling.
 - **No runtime overhead from i18n**: Messages are compiled-in static string slices in `config.rs`.
+- **Themes only recolor the 6 semantic colors**: `blue`/`magenta`/`orange`/`cyan`/`green`/`red` (directory, git, files, model, cost, context tier for the `plain` bar style). `theme = "default"` reuses the original 16-color ANSI constants; other themes use truecolor (`\x1b[38;2;r;g;bm`) matching official palettes. `rainbow`/`gradient` bar styles and the `gsd` bar style's tier colors are intentionally unaffected by `theme` — they keep their own fixed 256-color palettes.
+- **`usage_bar_style` also has a variant per theme** (`dracula`/`tokyo-night`/`one-dark`/`solarized-dark`/`phosphor`): renders the bar as a gradient across that theme's 6 semantic colors via `fill_theme_gradient()` in `src/components.rs`, which calls `build_palette()` directly — fully independent of the active `theme` config value (same pattern as `gradient`/`gsd` being independent of `theme`).
 
 ## Configuration
 
@@ -92,11 +95,12 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 # messages = false          # show context messages [true|false]
 # messages_language = "en"  # message language ["en"|"pt"|"es"]
 # usage_bar_style = "plain" # usage bar style ["plain"|"rainbow"|"gradient"|"gsd"]
+# theme = "default"         # color theme ["default"|"dracula"|"tokyo-night"|"one-dark"|"solarized-dark"|"phosphor"]
 ```
 
 All fields are optional. Shown values are defaults.
 
-**Context window display:** The progress bar is scaled against the *usable* portion of the context window. Claude Code reserves ~16.5% as an autocompact buffer; the bar reaches 100% when autocompact triggers, not when the raw window is exhausted. Formula: `used = round((1 - max(0, remaining - 16.5) / 83.5) * 100)`.
+**Context window display:** The progress bar is scaled against the *usable* portion of the context window: `context_window_size` minus a fixed 20,000-token output reserve (mirrors the `min(maxOutputTokens, 20000)` cap Claude Code applies internally, which isn't exposed in the statusline JSON). A fixed token amount, not a percentage, is used so the reserve doesn't grow just because the window does. Formula: `usable = context_window_size - 20000; used = round(current_usage / usable * 100)`, clamped to 100. This is computed directly from `current_usage`/`context_window_size`, not from the pre-calculated `remaining_percentage` field (which is a raw, unadjusted ratio and does not correspond to Claude Code's own "Context low (X% remaining)" warning — that warning is computed from internal state, such as whether auto-compact is enabled, that Claude Code does not pass to statusline scripts).
 
 **Blink at Critical (all bar styles):** At ≥86% the 🔥 emoji blinks via ANSI SGR 5 (`\x1b[5m`). At ≥96% the 💀 emoji blinks as well (same SGR 5 codes). Both apply regardless of `usage_bar_style`. This works in iTerm2, macOS Terminal, and kitty. **Ghostty does not render SGR 5 text blink** by design — the emoji appears without blinking. This is a known Ghostty limitation ([discussion #4258](https://github.com/ghostty-org/ghostty/discussions/4258)), not a bug in this binary.
 
@@ -118,6 +122,7 @@ Each module has inline tests. Run with `cargo test --bins`.
 - `src/input.rs`: JSON parsing tests, `validate_directory()` security tests
 - `src/render.rs`: `assemble()` tests (separator joining, empty part filtering)
 - `src/config.rs`: `print_defaults()` completeness test
+- `src/debug_log.rs`: `append()`/`append_to_path()` tests (creates file, accumulates entries, silent on bad path)
 - `src/configure.rs`: `run()` tests (create, merge, overwrite, backup, invalid JSON, non-object, output format, command path)
 
 ### Integration Tests (`tests/integration.rs`)
@@ -133,11 +138,11 @@ Test fixtures in `tests/fixtures/`:
 1. Add a builder function to `src/components.rs`:
 
 ```rust
-pub fn build_new_component(input: &ClaudeInput) -> String {
+pub fn build_new_component(input: &ClaudeInput, palette: &Palette) -> String {
     if condition {
         return String::new();
     }
-    format!("🆕 {CYAN}{}{NC}", input.some_field)
+    format!("🆕 {}{}{NC}", palette.cyan, input.some_field)
 }
 ```
 
@@ -145,19 +150,18 @@ pub fn build_new_component(input: &ClaudeInput) -> String {
 
 ```rust
 pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<String> {
-    let wave_time = if matches!(config.usage_bar_style, BarStyle::Rainbow) {
-        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-    } else {
-        0
-    };
+    let now_secs = || SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let wave_time = if matches!(config.usage_bar_style, BarStyle::Rainbow) { now_secs() } else { 0 };
+    let message_time = if config.messages { now_secs() } else { 0 };
+    let palette = build_palette(config.theme);
     vec![
-        build_directory(input),
-        build_git(git),
-        build_files(git.changed_files),
-        build_model(input),
-        build_context(input, config, wave_time),
-        build_cost(input.cost_usd, config),
-        build_new_component(input),  // add here
+        build_directory(input, &palette),
+        build_git(git, &palette),
+        build_files(git.changed_files, &palette),
+        build_model(input, &palette),
+        build_context(input, config, &palette, wave_time, message_time),
+        build_cost(input.cost_usd, config, &palette),
+        build_new_component(input, &palette),  // add here
     ]
 }
 ```
@@ -192,7 +196,8 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
 │   ├── config.rs           # TOML config + messages + enums
 │   ├── git.rs              # Git status (porcelain v2)
 │   ├── components.rs       # All component builders
-│   └── render.rs           # ANSI constants + assembly
+│   ├── render.rs           # ANSI constants + assembly
+│   └── debug_log.rs        # Debug-only stdin JSON logger (#[cfg(debug_assertions)])
 ├── tests/
 │   ├── integration.rs      # End-to-end binary tests
 │   └── fixtures/
@@ -200,7 +205,6 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
 │       └── claude-input-real.json  # Real Claude Code payload
 ├── install.sh              # macOS/Linux/WSL installer
 ├── install.ps1             # Windows PowerShell installer (self-contained)
-├── statusline.toml.example # Example config (generated by --print-defaults)
 └── assets/                 # Logo and demo images
 
 After installation (~/.claude/):

@@ -42,7 +42,7 @@ jobs:
           toolchain: '1.96.0'
           components: clippy
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   coverage:
     name: Coverage
