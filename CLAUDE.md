@@ -80,7 +80,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 
 ### Key Design Decisions
 
-- **Single git call**: `git status --porcelain=v2 --branch --untracked-files=all` provides branch and file status in one subprocess. Requires git 2.11+ (Dec 2016).
+- **Single git call**: `git status --porcelain=v2 --branch --untracked-files=all` provides branch and file status in one subprocess. Uses `--no-ahead-behind` (git 2.17+, Apr 2018) and `GIT_OPTIONAL_LOCKS=0` so a read-only display never computes upstream divergence or rewrites the index.
 - **Config via binary-adjacent TOML**: `config.rs` loads `statusline.toml` from the directory containing the running binary (`~/.claude/statusline.toml`). Falls back to defaults silently on missing file; logs warning on parse error.
 - **`--print-defaults`**: Prints commented TOML defaults to stdout. Used by installers to seed `statusline.toml`.
 - **`--configure-settings <settings_path> <command_path>`**: Reads `settings.json`, backs it up, merges the `statusLine` key, and writes atomically. Used by installers instead of external JSON tooling.
