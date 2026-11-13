@@ -52,6 +52,7 @@ cargo build && cp target/debug/statusline ~/.claude/statusline
 ### Linting
 
 ```bash
+cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
