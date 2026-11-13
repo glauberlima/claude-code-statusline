@@ -122,15 +122,17 @@ pub fn build_rate_limits(input: &ClaudeInput, palette: &Palette, now: u64) -> St
     format!("⏳ {}", parts.join(&format!(" {GRAY}·{NC} ")))
 }
 
-/// Compact duration: `45m`, `1h12m`, `2d3h`.
+/// Compact duration: `<1m`, `45m`, `1h12m`, `2d3h`.
 fn format_duration(secs: u64) -> String {
     let (d, h, m) = (secs / 86_400, secs % 86_400 / 3600, secs % 3600 / 60);
     if d > 0 {
         format!("{d}d{h}h")
     } else if h > 0 {
         format!("{h}h{m:02}m")
-    } else {
+    } else if m > 0 {
         format!("{m}m")
+    } else {
+        "<1m".to_string()
     }
 }
 
@@ -316,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn rate_limits_shows_reset_above_threshold() {
+    fn rate_limits_formats_hour_and_day_countdowns() {
         let now = 1_000_000;
         let input = ClaudeInput {
             rate_5h: rw(82, Some(now + 3600 + 12 * 60)),
@@ -362,6 +364,7 @@ mod tests {
 
     #[test]
     fn format_duration_units() {
+        assert_eq!(format_duration(45), "<1m");
         assert_eq!(format_duration(45 * 60), "45m");
         assert_eq!(format_duration(3600 + 5 * 60), "1h05m");
         assert_eq!(format_duration(86_400 + 3600), "1d1h");

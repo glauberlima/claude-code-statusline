@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let raw = read_stdin()?;
-    if cfg!(debug_assertions) || std::env::var_os("STATUSLINE_DEBUG").is_some() {
+    if cfg!(debug_assertions) || std::env::var("STATUSLINE_DEBUG").is_ok_and(|v| v == "1") {
         debug_log::append(&raw);
     }
     let input = input::parse(&raw)?;

@@ -59,14 +59,12 @@ struct RawContextWindow {
 }
 
 #[derive(Deserialize)]
+// Strict on purpose: one bad token field fails the whole RawUsage, which the
+// lenient `current_usage` turns into None (bar hidden) rather than an undercount.
 struct RawUsage {
-    #[serde(default, deserialize_with = "lenient")]
     input_tokens: Option<u32>,
-    #[serde(default, deserialize_with = "lenient")]
     output_tokens: Option<u32>,
-    #[serde(default, deserialize_with = "lenient")]
     cache_creation_input_tokens: Option<u32>,
-    #[serde(default, deserialize_with = "lenient")]
     cache_read_input_tokens: Option<u32>,
 }
 
@@ -290,8 +288,17 @@ mod tests {
         let r = parse(json).unwrap();
         assert_eq!(r.model_name, "unknown");
         assert_eq!(r.context_size, None);
-        assert_eq!(r.current_usage, Some(0));
+        assert_eq!(
+            r.current_usage, None,
+            "bad token field must hide, not count as 0"
+        );
         assert_eq!(r.cost_usd, 0.0);
+    }
+
+    #[test]
+    fn absent_token_fields_count_as_zero() {
+        let json = r#"{"context_window": {"current_usage": {"input_tokens": 1000, "output_tokens": null}}}"#;
+        assert_eq!(parse(json).unwrap().current_usage, Some(1000));
     }
 
     #[test]

@@ -72,10 +72,10 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 | `src/configure.rs` | `--configure-settings <settings_path> <command_path>` — reads/merges/writes `~/.claude/settings.json` atomically |
 | `src/input.rs` | JSON parsing via `serde_json`; `validate_directory()` for security |
 | `src/config.rs` | TOML config loading; `BarStyle`/`Language`/`Theme` enums with fallback warnings; `print_defaults()` |
-| `src/git.rs` | Single `git status --porcelain=v2 --branch --untracked-files=all` call; `parse_porcelain_v2()` |
+| `src/git.rs` | Single `git status --porcelain=v2 --branch --no-ahead-behind --untracked-files=all` call (with `GIT_OPTIONAL_LOCKS=0`); `parse_porcelain_v2()` |
 | `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_rate_limits`, `build_cost`), each taking a `&Palette`; `build_all()` orchestrator |
 | `src/render.rs` | ANSI color constants, `Palette`/`build_palette()` (theme → semantic colors), `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
-| `src/debug_log.rs` | Appends raw stdin JSON to `~/.claude/statusline-debug.log` for troubleshooting. Always on in debug builds; in release builds only when `STATUSLINE_DEBUG` is set (e.g. `"command": "STATUSLINE_DEBUG=1 ~/.claude/statusline"`) |
+| `src/debug_log.rs` | Appends raw stdin JSON to `~/.claude/statusline-debug.log` for troubleshooting. Always on in debug builds; in release builds only when `STATUSLINE_DEBUG=1` (e.g. `"command": "STATUSLINE_DEBUG=1 ~/.claude/statusline"`) |
 | `tests/integration.rs` | End-to-end tests spawning the compiled binary with fixture JSON |
 
 ### Key Design Decisions
@@ -104,7 +104,7 @@ All fields are optional. Shown values are defaults.
 
 **Context window display:** The progress bar is scaled against the *usable* portion of the context window: `context_window_size` minus a fixed 20,000-token output reserve (mirrors the `min(maxOutputTokens, 20000)` cap Claude Code applies internally, which isn't exposed in the statusline JSON). A fixed token amount, not a percentage, is used so the reserve doesn't grow just because the window does. Formula: `usable = context_window_size - 20000; used = round(current_usage / usable * 100)`, clamped to 100. This is computed directly from `current_usage`/`context_window_size`, not from the pre-calculated `remaining_percentage` field (which is a raw, unadjusted ratio and does not correspond to Claude Code's own "Context low (X% remaining)" warning — that warning is computed from internal state, such as whether auto-compact is enabled, that Claude Code does not pass to statusline scripts).
 
-**Rate limits (⏳):** `rate_limits.five_hour`/`seven_day` are only sent for claude.ai Pro/Max/Ultra subscribers, after the first API response; the segment is hidden when absent. `used_percentage` is rounded and colored with the same tiers as the `plain` context bar. Each window shows a `↻` countdown to its `resets_at` (`45m`, `1h05m`, `2d3h`). `spend_limit` (gateway) is not displayed.
+**Rate limits (⏳):** `rate_limits.five_hour`/`seven_day` are only sent for claude.ai Pro/Max/Ultra subscribers, after the first API response; the segment is hidden when absent. `used_percentage` is rounded and colored with the same tiers as the `plain` context bar. Each window shows a `↻` countdown to its `resets_at` (`<1m`, `45m`, `1h05m`, `2d3h`). `spend_limit` (gateway) is not displayed.
 
 **Blink at Critical (all bar styles):** At ≥86% the 🔥 emoji blinks via ANSI SGR 5 (`\x1b[5m`). At ≥96% the 💀 emoji blinks as well (same SGR 5 codes). Both apply regardless of `usage_bar_style`. This works in iTerm2, macOS Terminal, and kitty. **Ghostty does not render SGR 5 text blink** by design — the emoji appears without blinking. This is a known Ghostty limitation ([discussion #4258](https://github.com/ghostty-org/ghostty/discussions/4258)), not a bug in this binary.
 
@@ -154,17 +154,14 @@ pub fn build_new_component(input: &ClaudeInput, palette: &Palette) -> String {
 
 ```rust
 pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<String> {
-    let now_secs = || SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let wave_time = if matches!(config.usage_bar_style, BarStyle::Rainbow) { now_secs() } else { 0 };
-    let message_time = if config.messages { now_secs() } else { 0 };
-    let now = now_secs();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let palette = build_palette(config.theme);
     vec![
         build_directory(input, &palette),
         build_git(git, &palette),
         build_files(git.changed_files, &palette),
         build_model(input, &palette),
-        build_context(input, config, &palette, wave_time, message_time),
+        build_context(input, config, &palette, now),
         build_rate_limits(input, &palette, now),
         build_cost(input.cost_usd, config, &palette),
         build_new_component(input, &palette),  // add here
