@@ -1,17 +1,5 @@
 # Changelog
 
-## v1.2.0 — 2026-11-13
-
-### Bug Fixes
-
-- resolve symlinks before atomic rename in configure-settings ([#83](https://github.com/glauberlima/claude-code-statusline/pull/83)) — [@tpwo](https://github.com/tpwo)
-
-
-### Features
-
-- add color themes for statusline segments ([#81](https://github.com/glauberlima/claude-code-statusline/pull/81)) — [@glauberlima](https://github.com/glauberlima)
-- show 5h/7d subscription usage with reset countdown ([#84](https://github.com/glauberlima/claude-code-statusline/pull/84)) — [@glauberlima](https://github.com/glauberlima)
-
 ## v1.1.0 — 2026-07-02
 
 ### Bug Fixes
