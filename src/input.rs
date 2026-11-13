@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
 
 pub struct ClaudeInput {
     pub model_name: String,
@@ -21,55 +22,83 @@ pub struct RateWindow {
 
 #[derive(Deserialize)]
 struct RawInput {
+    #[serde(default, deserialize_with = "lenient")]
     model: Option<RawModel>,
+    #[serde(default, deserialize_with = "lenient")]
     workspace: Option<RawWorkspace>,
+    #[serde(default, deserialize_with = "lenient")]
     context_window: Option<RawContextWindow>,
+    #[serde(default, deserialize_with = "lenient")]
     cost: Option<RawCost>,
+    #[serde(default, deserialize_with = "lenient")]
     rate_limits: Option<RawRateLimits>,
 }
 
 #[derive(Deserialize)]
 struct RawModel {
+    #[serde(default, deserialize_with = "lenient")]
     display_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
     id: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RawWorkspace {
+    #[serde(default, deserialize_with = "lenient")]
     current_dir: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
     project_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RawContextWindow {
+    #[serde(default, deserialize_with = "lenient")]
     context_window_size: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
     current_usage: Option<RawUsage>,
 }
 
 #[derive(Deserialize)]
 struct RawUsage {
+    #[serde(default, deserialize_with = "lenient")]
     input_tokens: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
     output_tokens: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
     cache_creation_input_tokens: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
     cache_read_input_tokens: Option<u32>,
 }
 
 #[derive(Deserialize)]
 struct RawRateLimits {
+    #[serde(default, deserialize_with = "lenient")]
     five_hour: Option<RawRateWindow>,
+    #[serde(default, deserialize_with = "lenient")]
     seven_day: Option<RawRateWindow>,
 }
 
 #[derive(Deserialize)]
 struct RawRateWindow {
+    #[serde(default, deserialize_with = "lenient")]
     used_percentage: Option<f64>,
-    // f64, not u64: an unexpected float/negative value must not fail the whole parse.
+    // f64, not u64, so a float epoch still converts instead of being dropped.
+    #[serde(default, deserialize_with = "lenient")]
     resets_at: Option<f64>,
 }
 
 #[derive(Deserialize)]
 struct RawCost {
+    #[serde(default, deserialize_with = "lenient")]
     total_cost_usd: Option<f64>,
+}
+
+/// Field-level fallback: a value of the wrong type (float where an integer is
+/// expected, string where a number is, …) becomes `None` instead of failing the
+/// whole payload and blanking the statusline when Claude Code's schema drifts.
+fn lenient<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).ok())
 }
 
 pub fn parse(json: &str) -> Result<ClaudeInput> {
@@ -253,6 +282,16 @@ mod tests {
         let r = parse(r#"{"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": 1738425600.0}, "seven_day": {"used_percentage": 10, "resets_at": -5}}}"#).unwrap();
         assert_eq!(r.rate_5h.unwrap().resets_at, Some(1738425600));
         assert_eq!(r.rate_7d.unwrap().resets_at, None);
+    }
+
+    #[test]
+    fn wrong_field_types_do_not_fail_parse() {
+        let json = r#"{"model": {"display_name": 42}, "workspace": "oops", "context_window": {"context_window_size": 200000.5, "current_usage": {"input_tokens": "x"}}, "cost": {"total_cost_usd": "1"}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(r.model_name, "unknown");
+        assert_eq!(r.context_size, None);
+        assert_eq!(r.current_usage, Some(0));
+        assert_eq!(r.cost_usd, 0.0);
     }
 
     #[test]
