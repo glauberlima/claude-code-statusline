@@ -2,8 +2,8 @@ use crate::config::{BarStyle, Config, ContextTier, Theme, get_messages};
 use crate::git::{GitInfo, GitState};
 use crate::input::{ClaudeInput, RateWindow};
 use crate::render::{
-    BAR_EMPTY, BAR_FILLED, BAR_WIDTH, GRADIENT_COLORS, GRAY, GREEN, NC, ORANGE, ORANGE_256, RED,
-    Palette, WAVE_COLORS, build_palette,
+    BAR_EMPTY, BAR_FILLED, BAR_WIDTH, GRADIENT_COLORS, GRAY, GREEN, NC, ORANGE, ORANGE_256,
+    Palette, RED, WAVE_COLORS, build_palette,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -77,9 +77,11 @@ pub fn build_context(
     wave_time: u64,
     message_time: u64,
 ) -> String {
-    let (Some(pct), Some(current_usage), Some(context_size)) =
-        (input.context_percent, input.current_usage, input.context_size)
-    else {
+    let (Some(pct), Some(current_usage), Some(context_size)) = (
+        input.context_percent,
+        input.current_usage,
+        input.context_size,
+    ) else {
         return String::new();
     };
     let bar = build_usage_bar(pct, config.usage_bar_style, palette, wave_time);
@@ -118,21 +120,22 @@ const RATE_RESET_THRESHOLD: u8 = 75;
 pub fn build_rate_limits(input: &ClaudeInput, palette: &Palette, now: u64) -> String {
     let part = |label: &str, w: Option<RateWindow>| {
         // A window past its resets_at holds a stale pre-reset value until the next API response.
-        w.filter(|w| w.resets_at.is_none_or(|at| at > now)).map(|w| {
-            let color = match ContextTier::from_percent(w.pct) {
-                ContextTier::VeryLow => &palette.green,
-                ContextTier::Low => &palette.cyan,
-                ContextTier::Medium | ContextTier::High => &palette.orange,
-                ContextTier::Critical => &palette.red,
-            };
-            let reset = match w.resets_at {
-                Some(at) if w.pct > RATE_RESET_THRESHOLD => {
-                    format!(" {GRAY}↻{}{NC}", format_duration(at - now))
-                }
-                _ => String::new(),
-            };
-            format!("{label} {color}{}%{NC}{reset}", w.pct)
-        })
+        w.filter(|w| w.resets_at.is_none_or(|at| at > now))
+            .map(|w| {
+                let color = match ContextTier::from_percent(w.pct) {
+                    ContextTier::VeryLow => &palette.green,
+                    ContextTier::Low => &palette.cyan,
+                    ContextTier::Medium | ContextTier::High => &palette.orange,
+                    ContextTier::Critical => &palette.red,
+                };
+                let reset = match w.resets_at {
+                    Some(at) if w.pct > RATE_RESET_THRESHOLD => {
+                        format!(" {GRAY}↻{}{NC}", format_duration(at - now))
+                    }
+                    _ => String::new(),
+                };
+                format!("{label} {color}{}%{NC}{reset}", w.pct)
+            })
     };
     let parts: Vec<String> = [part("5h", input.rate_5h), part("7d", input.rate_7d)]
         .into_iter()
@@ -384,7 +387,10 @@ mod tests {
             ..default_input()
         };
         let out = build_rate_limits(&input, &default_palette(), 1000);
-        assert!(out.contains("7d ") && out.contains("90%") && !out.contains("5h"), "{out}");
+        assert!(
+            out.contains("7d ") && out.contains("90%") && !out.contains("5h"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -395,9 +401,15 @@ mod tests {
             ..default_input()
         };
         let out = build_rate_limits(&input, &default_palette(), 1000);
-        assert!(!out.contains("5h") && !out.contains("92%"), "stale window must hide: {out}");
+        assert!(
+            !out.contains("5h") && !out.contains("92%"),
+            "stale window must hide: {out}"
+        );
         assert!(out.contains("7d ") && out.contains("41%"), "{out}");
-        let all_stale = ClaudeInput { rate_5h: rw(92, Some(500)), ..default_input() };
+        let all_stale = ClaudeInput {
+            rate_5h: rw(92, Some(500)),
+            ..default_input()
+        };
         assert_eq!(build_rate_limits(&all_stale, &default_palette(), 1000), "");
     }
 
@@ -448,9 +460,15 @@ mod tests {
         let bar = build_usage_bar(100, BarStyle::Gradient, &default_palette(), 0);
         assert!(bar.contains('█'));
         // first color code must be GRADIENT_COLORS[0] = 46 (green)
-        assert!(bar.contains("\x1b[38;5;46m"), "first char must be green (46)");
+        assert!(
+            bar.contains("\x1b[38;5;46m"),
+            "first char must be green (46)"
+        );
         // last filled color code must be GRADIENT_COLORS[10] = 196 (red)
-        assert!(bar.contains("\x1b[38;5;196m"), "last char must be red (196)");
+        assert!(
+            bar.contains("\x1b[38;5;196m"),
+            "last char must be red (196)"
+        );
     }
 
     #[test]
@@ -460,7 +478,10 @@ mod tests {
         assert!(bar.contains('█'));
         assert!(bar.contains('░'));
         // 196 is the last red — should not appear at 50%
-        assert!(!bar.contains("\x1b[38;5;196m"), "red (196) must not appear at 50%");
+        assert!(
+            !bar.contains("\x1b[38;5;196m"),
+            "red (196) must not appear at 50%"
+        );
     }
 
     #[test]
@@ -519,7 +540,10 @@ mod tests {
     fn files_singular_when_one_change() {
         let out = build_files(1, &default_palette());
         assert!(out.contains("1 file"), "should show singular: {out}");
-        assert!(!out.contains("1 files"), "must not show plural for 1: {out}");
+        assert!(
+            !out.contains("1 files"),
+            "must not show plural for 1: {out}"
+        );
     }
 
     #[test]
@@ -552,7 +576,10 @@ mod tests {
             changed_files: 0,
         };
         let out = build_git(&info, &default_palette());
-        assert!(!out.starts_with(' '), "NotRepo output must not start with space");
+        assert!(
+            !out.starts_with(' '),
+            "NotRepo output must not start with space"
+        );
     }
 
     #[test]
@@ -585,14 +612,20 @@ mod tests {
     fn fill_gsd_medium_is_yellow() {
         // 60% → Medium → yellow \x1b[0;33m
         let bar = build_usage_bar(60, BarStyle::Gsd, &default_palette(), 0);
-        assert!(bar.contains("\x1b[0;33m"), "Medium gsd must use yellow: {bar:?}");
+        assert!(
+            bar.contains("\x1b[0;33m"),
+            "Medium gsd must use yellow: {bar:?}"
+        );
     }
 
     #[test]
     fn fill_gsd_high_is_orange_256() {
         // 80% → High → 256-color orange 208
         let bar = build_usage_bar(80, BarStyle::Gsd, &default_palette(), 0);
-        assert!(bar.contains("\x1b[38;5;208m"), "High gsd must use 256-color orange: {bar:?}");
+        assert!(
+            bar.contains("\x1b[38;5;208m"),
+            "High gsd must use 256-color orange: {bar:?}"
+        );
     }
 
     #[test]
@@ -614,17 +647,27 @@ mod tests {
         let phosphor = crate::render::build_palette(crate::config::Theme::Phosphor);
         let bar = build_usage_bar(100, BarStyle::Phosphor, &default_palette(), 0);
         assert!(bar.contains('█'));
-        assert!(bar.contains(&phosphor.blue), "first color must be theme's blue: {bar:?}");
-        assert!(bar.contains(&phosphor.red), "last color must be theme's red: {bar:?}");
+        assert!(
+            bar.contains(&phosphor.blue),
+            "first color must be theme's blue: {bar:?}"
+        );
+        assert!(
+            bar.contains(&phosphor.red),
+            "last color must be theme's red: {bar:?}"
+        );
     }
 
     #[test]
     fn theme_bar_ignores_active_theme() {
         // usage_bar_style = "dracula" must render dracula colors regardless of theme config
         let dracula = crate::render::build_palette(crate::config::Theme::Dracula);
-        let solarized_active_palette = crate::render::build_palette(crate::config::Theme::SolarizedDark);
+        let solarized_active_palette =
+            crate::render::build_palette(crate::config::Theme::SolarizedDark);
         let bar = build_usage_bar(100, BarStyle::Dracula, &solarized_active_palette, 0);
-        assert!(bar.contains(&dracula.blue), "bar must use dracula palette, not active theme: {bar:?}");
+        assert!(
+            bar.contains(&dracula.blue),
+            "bar must use dracula palette, not active theme: {bar:?}"
+        );
     }
 
     #[test]
@@ -646,8 +689,14 @@ mod tests {
             cfg.usage_bar_style = style;
             let out = build_context(&input, &cfg, &default_palette(), 0, 0);
             assert!(out.contains("💀"), "{style:?} at 96% must show 💀: {out}");
-            assert!(out.contains("\x1b[5m"), "{style:?} at 96% 💀 must blink: {out:?}");
-            assert!(!out.contains("📊"), "{style:?} at 96% must not show 📊: {out}");
+            assert!(
+                out.contains("\x1b[5m"),
+                "{style:?} at 96% 💀 must blink: {out:?}"
+            );
+            assert!(
+                !out.contains("📊"),
+                "{style:?} at 96% must not show 📊: {out}"
+            );
         }
     }
 
@@ -669,7 +718,10 @@ mod tests {
             let mut cfg = default_config();
             cfg.usage_bar_style = style;
             let out = build_context(&input, &cfg, &default_palette(), 0, 0);
-            assert!(out.contains("\x1b[5m🔥\x1b[25m"), "{style:?} at 90% must blink 🔥: {out:?}");
+            assert!(
+                out.contains("\x1b[5m🔥\x1b[25m"),
+                "{style:?} at 90% must blink 🔥: {out:?}"
+            );
         }
     }
 
@@ -678,7 +730,10 @@ mod tests {
         let mut input = default_input();
         input.context_percent = Some(96);
         let out = build_context(&input, &default_config(), &default_palette(), 0, 0);
-        assert!(out.contains("\x1b[5m💀\x1b[25m"), "96% must blink 💀: {out:?}");
+        assert!(
+            out.contains("\x1b[5m💀\x1b[25m"),
+            "96% must blink 💀: {out:?}"
+        );
     }
 
     #[test]
@@ -689,7 +744,10 @@ mod tests {
         cfg.usage_bar_style = BarStyle::Gsd;
         let out = build_context(&input, &cfg, &default_palette(), 0, 0);
         assert!(out.contains("📊"), "gsd non-critical must show 📊: {out}");
-        assert!(!out.contains("💀"), "gsd non-critical must not show 💀: {out}");
+        assert!(
+            !out.contains("💀"),
+            "gsd non-critical must not show 💀: {out}"
+        );
     }
 
     #[test]
@@ -700,9 +758,11 @@ mod tests {
         cfg.usage_bar_style = BarStyle::Gradient;
         let out = build_context(&input, &cfg, &default_palette(), 0, 0);
         assert!(out.contains("🔥"), "gradient critical must show 🔥: {out}");
-        assert!(!out.contains("📊"), "gradient critical must not show 📊: {out}");
+        assert!(
+            !out.contains("📊"),
+            "gradient critical must not show 📊: {out}"
+        );
     }
-
 
     #[test]
     fn context_plain_fire_at_critical() {
@@ -723,5 +783,4 @@ mod tests {
         assert!(!out.contains("🔥"), "85% must not show 🔥: {out}");
         assert!(!out.contains("💀"), "85% must not show 💀: {out}");
     }
-
 }

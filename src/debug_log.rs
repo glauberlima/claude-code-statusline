@@ -7,7 +7,9 @@ pub fn append(raw: &str) {
     let Some(home) = std::env::var_os("HOME") else {
         return;
     };
-    let path = PathBuf::from(home).join(".claude").join("statusline-debug.log");
+    let path = PathBuf::from(home)
+        .join(".claude")
+        .join("statusline-debug.log");
     append_to_path(&path, raw);
 }
 

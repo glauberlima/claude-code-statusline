@@ -30,7 +30,6 @@ fn default_true() -> bool {
     true
 }
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub enum BarStyle {
     #[default]
@@ -65,7 +64,6 @@ impl<'de> Deserialize<'de> for BarStyle {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Theme {
@@ -654,21 +652,32 @@ theme = "dracula"
         assert!(out.contains(
             "[\"plain\"|\"rainbow\"|\"gradient\"|\"gsd\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]"
         ));
-        assert!(out.contains("[\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]"));
+        assert!(out.contains(
+            "[\"default\"|\"dracula\"|\"tokyo-night\"|\"one-dark\"|\"solarized-dark\"|\"phosphor\"]"
+        ));
     }
 
     #[test]
     fn tier_from_percent() {
         assert!(matches!(ContextTier::from_percent(0), ContextTier::VeryLow));
-        assert!(matches!(ContextTier::from_percent(30), ContextTier::VeryLow));
+        assert!(matches!(
+            ContextTier::from_percent(30),
+            ContextTier::VeryLow
+        ));
         assert!(matches!(ContextTier::from_percent(31), ContextTier::Low));
         assert!(matches!(ContextTier::from_percent(50), ContextTier::Low));
         assert!(matches!(ContextTier::from_percent(51), ContextTier::Medium));
         assert!(matches!(ContextTier::from_percent(70), ContextTier::Medium));
         assert!(matches!(ContextTier::from_percent(71), ContextTier::High));
         assert!(matches!(ContextTier::from_percent(85), ContextTier::High));
-        assert!(matches!(ContextTier::from_percent(86), ContextTier::Critical));
-        assert!(matches!(ContextTier::from_percent(100), ContextTier::Critical));
+        assert!(matches!(
+            ContextTier::from_percent(86),
+            ContextTier::Critical
+        ));
+        assert!(matches!(
+            ContextTier::from_percent(100),
+            ContextTier::Critical
+        ));
     }
 
     #[test]
@@ -694,7 +703,10 @@ theme = "dracula"
     #[test]
     fn print_defaults_contains_gsd() {
         let out = print_defaults();
-        assert!(out.contains("\"gsd\""), "print_defaults must list gsd option");
+        assert!(
+            out.contains("\"gsd\""),
+            "print_defaults must list gsd option"
+        );
     }
 
     #[test]
@@ -716,7 +728,10 @@ theme = "dracula"
         ] {
             let toml_str = format!(r#"theme = "{raw}""#);
             let c: Config = toml::from_str(&toml_str).unwrap();
-            assert_eq!(c.theme, expected, "theme \"{raw}\" did not deserialize correctly");
+            assert_eq!(
+                c.theme, expected,
+                "theme \"{raw}\" did not deserialize correctly"
+            );
         }
     }
 }

@@ -1,10 +1,10 @@
 mod components;
 mod config;
 mod configure;
+mod debug_log;
 mod git;
 mod input;
 mod render;
-mod debug_log;
 
 use anyhow::Context;
 
