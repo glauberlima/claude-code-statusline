@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/glauberlima/claude-code-statusline/compare/v1.1.0...v1.2.0) (2026-11-13)
+
+
+### Features
+
+* **rate-limits:** show 5h/7d subscription usage with reset countdown ([#84](https://github.com/glauberlima/claude-code-statusline/issues/84)) ([8ff068b](https://github.com/glauberlima/claude-code-statusline/commit/8ff068bd8c09873ce33e1efc537c099f8f2fd023))
+* **theme:** add color themes for statusline segments ([#81](https://github.com/glauberlima/claude-code-statusline/issues/81)) ([83928fb](https://github.com/glauberlima/claude-code-statusline/commit/83928fb7abeb0a906b4c48da9146e36dc4d4d628))
+
+
+### Bug Fixes
+
+* resolve symlinks before atomic rename in configure-settings ([#83](https://github.com/glauberlima/claude-code-statusline/issues/83)) ([020ccb9](https://github.com/glauberlima/claude-code-statusline/commit/020ccb93c8f92347b03a88b3899c136310179ae0))
+
 ## v1.1.0 — 2026-07-02
 
 ### Bug Fixes
@@ -62,4 +75,3 @@
 ### Features
 
 - add rainbow wave animation to progress bar ([#28](https://github.com/glauberlima/claude-code-statusline/pull/28)) — [@AurelianoBR](https://github.com/AurelianoBR)
-
