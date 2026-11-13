@@ -88,7 +88,7 @@ Release tags are listed on the [GitHub releases page](https://github.com/glauber
 - ✏️ **File changes**
 - 🤖 **Model name**
 - 📊 **Context usage** with progress bar and funny messages
-- ⏳ **Subscription rate limits** (5-hour and weekly usage, with reset countdown above 75%) when available
+- ⏳ **Subscription rate limits** (5-hour and weekly usage, with countdown to each reset) when available
 - 💰 **Cost tracking**
 - 🎨 **Color themes** (Dracula, Tokyo Night, One Dark, Solarized Dark, Phosphor)
 

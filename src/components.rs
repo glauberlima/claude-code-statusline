@@ -99,21 +99,16 @@ pub fn build_context(input: &ClaudeInput, config: &Config, palette: &Palette, no
     format!("{emoji} {GRAY}[{NC}{bar_and_pct} {usage}/{size}{message_part}")
 }
 
-/// Reset countdown is shown only above this usage, where it becomes actionable.
-const RATE_RESET_THRESHOLD: u8 = 75;
-
 pub fn build_rate_limits(input: &ClaudeInput, palette: &Palette, now: u64) -> String {
     let part = |label: &str, w: Option<RateWindow>| {
         // A window past its resets_at holds a stale pre-reset value until the next API response.
         w.filter(|w| w.resets_at.is_none_or(|at| at > now))
             .map(|w| {
                 let color = palette.tier_color(w.pct);
-                let reset = match w.resets_at {
-                    Some(at) if w.pct > RATE_RESET_THRESHOLD => {
-                        format!(" {GRAY}↻{}{NC}", format_duration(at - now))
-                    }
-                    _ => String::new(),
-                };
+                let reset = w
+                    .resets_at
+                    .map(|at| format!(" {GRAY}↻{}{NC}", format_duration(at - now)))
+                    .unwrap_or_default();
                 format!("{label} {color}{}%{NC}{reset}", w.pct)
             })
     };
@@ -302,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn rate_limits_shows_both_windows_without_reset_below_threshold() {
+    fn rate_limits_shows_reset_at_any_usage() {
         let input = ClaudeInput {
             rate_5h: rw(23, Some(5000)),
             rate_7d: rw(75, Some(5000)),
@@ -314,7 +309,10 @@ mod tests {
             out.contains("23%") && out.contains("7d ") && out.contains("75%"),
             "{out}"
         );
-        assert!(!out.contains('↻'), "no reset at <=75%: {out}");
+        assert!(
+            out.contains("↻1h06m"),
+            "reset shown even at low usage: {out}"
+        );
     }
 
     #[test]

@@ -102,10 +102,7 @@ fn shows_rate_limits_when_present() {
         out.contains("82%") && out.contains("41%"),
         "missing percents in: {out}"
     );
-    assert!(
-        out.contains('↻'),
-        "missing reset countdown above 75% in: {out}"
-    );
+    assert!(out.contains('↻'), "missing reset countdown in: {out}");
 }
 
 #[test]
