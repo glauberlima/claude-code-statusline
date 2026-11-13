@@ -8,7 +8,7 @@ pub const ORANGE_256: &str = "\x1b[38;5;208m";
 pub const GRAY: &str = "\x1b[0;90m";
 pub const NC: &str = "\x1b[0m";
 
-use crate::config::Theme;
+use crate::config::{ContextTier, Theme};
 
 /// The six semantic colors used by directory/git/files/model/cost/context components.
 /// `Theme::Default` reuses the plain 16-color ANSI constants above; other themes
@@ -90,19 +90,30 @@ pub const WAVE_COLORS: &[u8] = &[196, 208, 220, 226, 118, 46, 48, 51, 33, 21, 93
 // 256-color gradient: green → yellow → orange → red (positional, left=low usage, right=high)
 pub const GRADIENT_COLORS: &[u8] = &[46, 82, 118, 154, 190, 226, 220, 214, 208, 202, 196];
 
+impl Palette {
+    /// Semantic color for a usage percentage, by severity tier.
+    pub fn tier_color(&self, pct: u8) -> &str {
+        match ContextTier::from_percent(pct) {
+            ContextTier::VeryLow => &self.green,
+            ContextTier::Low => &self.cyan,
+            ContextTier::Medium | ContextTier::High => &self.orange,
+            ContextTier::Critical => &self.red,
+        }
+    }
+}
+
 pub fn separator() -> String {
     format!(" {GRAY}|{NC} ")
 }
 
 /// Join non-empty parts with the separator.
 pub fn assemble(parts: &[String]) -> String {
-    let sep = separator();
-    let joined: String = parts
+    let joined = parts
         .iter()
         .filter(|p| !p.is_empty())
-        .cloned()
+        .map(String::as_str)
         .collect::<Vec<_>>()
-        .join(&sep);
+        .join(&separator());
     format!("{joined}\n")
 }
 
