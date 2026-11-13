@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
 
 pub struct ClaudeInput {
     pub model_name: String,
@@ -8,35 +9,58 @@ pub struct ClaudeInput {
     pub current_usage: Option<u32>,
     pub context_percent: Option<u8>,
     pub cost_usd: f64,
+    pub rate_5h: Option<RateWindow>,
+    pub rate_7d: Option<RateWindow>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RateWindow {
+    pub pct: u8,
+    /// Unix epoch seconds when the window resets.
+    pub resets_at: Option<u64>,
 }
 
 #[derive(Deserialize)]
 struct RawInput {
+    #[serde(default, deserialize_with = "lenient")]
     model: Option<RawModel>,
+    #[serde(default, deserialize_with = "lenient")]
     workspace: Option<RawWorkspace>,
+    #[serde(default, deserialize_with = "lenient")]
     context_window: Option<RawContextWindow>,
+    #[serde(default, deserialize_with = "lenient")]
     cost: Option<RawCost>,
+    #[serde(default, deserialize_with = "lenient")]
+    rate_limits: Option<RawRateLimits>,
 }
 
 #[derive(Deserialize)]
 struct RawModel {
+    #[serde(default, deserialize_with = "lenient")]
     display_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
     id: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RawWorkspace {
+    #[serde(default, deserialize_with = "lenient")]
     current_dir: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
     project_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RawContextWindow {
+    #[serde(default, deserialize_with = "lenient")]
     context_window_size: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
     current_usage: Option<RawUsage>,
 }
 
 #[derive(Deserialize)]
+// Strict on purpose: one bad token field fails the whole RawUsage, which the
+// lenient `current_usage` turns into None (bar hidden) rather than an undercount.
 struct RawUsage {
     input_tokens: Option<u32>,
     output_tokens: Option<u32>,
@@ -45,8 +69,34 @@ struct RawUsage {
 }
 
 #[derive(Deserialize)]
+struct RawRateLimits {
+    #[serde(default, deserialize_with = "lenient")]
+    five_hour: Option<RawRateWindow>,
+    #[serde(default, deserialize_with = "lenient")]
+    seven_day: Option<RawRateWindow>,
+}
+
+#[derive(Deserialize)]
+struct RawRateWindow {
+    #[serde(default, deserialize_with = "lenient")]
+    used_percentage: Option<f64>,
+    // f64, not u64, so a float epoch still converts instead of being dropped.
+    #[serde(default, deserialize_with = "lenient")]
+    resets_at: Option<f64>,
+}
+
+#[derive(Deserialize)]
 struct RawCost {
+    #[serde(default, deserialize_with = "lenient")]
     total_cost_usd: Option<f64>,
+}
+
+/// Field-level fallback: a value of the wrong type (float where an integer is
+/// expected, string where a number is, …) becomes `None` instead of failing the
+/// whole payload and blanking the statusline when Claude Code's schema drifts.
+fn lenient<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).ok())
 }
 
 pub fn parse(json: &str) -> Result<ClaudeInput> {
@@ -102,6 +152,18 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         .and_then(|c| c.total_cost_usd)
         .unwrap_or(0.0);
 
+    let rl = raw.rate_limits.as_ref();
+    let rate_pct = |w: Option<&RawRateWindow>| {
+        w.and_then(|w| {
+            w.used_percentage.map(|p| RateWindow {
+                pct: p.round().clamp(0.0, 100.0) as u8,
+                resets_at: w.resets_at.filter(|t| *t > 0.0).map(|t| t as u64),
+            })
+        })
+    };
+    let rate_5h = rate_pct(rl.and_then(|r| r.five_hour.as_ref()));
+    let rate_7d = rate_pct(rl.and_then(|r| r.seven_day.as_ref()));
+
     Ok(ClaudeInput {
         model_name,
         current_dir,
@@ -109,6 +171,8 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         current_usage,
         context_percent,
         cost_usd,
+        rate_5h,
+        rate_7d,
     })
 }
 
@@ -189,6 +253,69 @@ mod tests {
         let json = r#"{"context_window": {"context_window_size": 200000, "current_usage": {"input_tokens": 185000, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}}"#;
         let r = parse(json).unwrap();
         assert_eq!(r.context_percent, Some(100));
+    }
+
+    #[test]
+    fn parses_rate_limits_rounded() {
+        let json = r#"{"rate_limits": {"five_hour": {"used_percentage": 23.5, "resets_at": 1738425600}, "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600}}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(
+            r.rate_5h,
+            Some(RateWindow {
+                pct: 24,
+                resets_at: Some(1738425600)
+            })
+        );
+        assert_eq!(
+            r.rate_7d,
+            Some(RateWindow {
+                pct: 41,
+                resets_at: Some(1738857600)
+            })
+        );
+    }
+
+    #[test]
+    fn rate_limits_tolerates_float_and_negative_resets_at() {
+        let r = parse(r#"{"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": 1738425600.0}, "seven_day": {"used_percentage": 10, "resets_at": -5}}}"#).unwrap();
+        assert_eq!(r.rate_5h.unwrap().resets_at, Some(1738425600));
+        assert_eq!(r.rate_7d.unwrap().resets_at, None);
+    }
+
+    #[test]
+    fn wrong_field_types_do_not_fail_parse() {
+        let json = r#"{"model": {"display_name": 42}, "workspace": "oops", "context_window": {"context_window_size": 200000.5, "current_usage": {"input_tokens": "x"}}, "cost": {"total_cost_usd": "1"}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(r.model_name, "unknown");
+        assert_eq!(r.context_size, None);
+        assert_eq!(
+            r.current_usage, None,
+            "bad token field must hide, not count as 0"
+        );
+        assert_eq!(r.cost_usd, 0.0);
+    }
+
+    #[test]
+    fn absent_token_fields_count_as_zero() {
+        let json = r#"{"context_window": {"current_usage": {"input_tokens": 1000, "output_tokens": null}}}"#;
+        assert_eq!(parse(json).unwrap().current_usage, Some(1000));
+    }
+
+    #[test]
+    fn rate_limits_absent_or_partial() {
+        let r = parse(MINIMAL).unwrap();
+        assert_eq!((r.rate_5h, r.rate_7d), (None, None));
+        let r = parse(r#"{"rate_limits": {"five_hour": {"used_percentage": 150}}}"#).unwrap();
+        assert_eq!(
+            (r.rate_5h, r.rate_7d),
+            (
+                Some(RateWindow {
+                    pct: 100,
+                    resets_at: None
+                }),
+                None
+            )
+        );
     }
 
     #[test]

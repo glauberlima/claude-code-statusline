@@ -36,8 +36,11 @@ pub fn get_git_info(dir: &str) -> GitInfo {
             "status",
             "--porcelain=v2",
             "--branch",
+            "--no-ahead-behind",
             "--untracked-files=all",
         ])
+        // Read-only display: don't take index.lock or rewrite the index.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .current_dir(dir)
         .output();
 

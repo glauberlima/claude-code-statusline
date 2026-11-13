@@ -156,10 +156,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Install Rust 1.96.0
+      - name: Install Rust 1.100.0
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.96.0'
+          toolchain: '1.100.0'
           targets: x86_64-apple-darwin,aarch64-apple-darwin
       - name: Patch Cargo.toml version (unstable)
         if: inputs.type == 'unstable'
@@ -194,10 +194,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Install Rust 1.96.0
+      - name: Install Rust 1.100.0
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.96.0'
+          toolchain: '1.100.0'
       - name: Patch Cargo.toml version (unstable)
         if: inputs.type == 'unstable'
         env:
@@ -225,10 +225,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Install Rust 1.96.0
+      - name: Install Rust 1.100.0
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.96.0'
+          toolchain: '1.100.0'
       - name: Patch Cargo.toml version (unstable)
         if: inputs.type == 'unstable'
         env:

@@ -7,8 +7,9 @@ pub fn run(settings_path: &str, command_path: &str) -> anyhow::Result<()> {
 
     let (content, file_existed) = if path.exists() {
         (
-            std::fs::read_to_string(path)
-                .with_context(|| format!("statusline: cannot read settings file: {settings_path}"))?,
+            std::fs::read_to_string(path).with_context(|| {
+                format!("statusline: cannot read settings file: {settings_path}")
+            })?,
             true,
         )
     } else {
@@ -48,8 +49,9 @@ pub fn run(settings_path: &str, command_path: &str) -> anyhow::Result<()> {
         + "\n";
 
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("statusline: cannot create directory: {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!("statusline: cannot create directory: {}", parent.display())
+        })?;
     }
 
     let pid = std::process::id();
@@ -75,10 +77,7 @@ mod tests {
     use std::fs;
 
     fn tmp_path(tag: u32) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "statusline-cfg-test-{}-{tag}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("statusline-cfg-test-{}-{tag}", std::process::id()))
     }
 
     #[test]
@@ -86,8 +85,7 @@ mod tests {
         let p = tmp_path(line!());
         let _ = fs::remove_file(&p);
         run(p.to_str().unwrap(), "~/.claude/statusline").unwrap();
-        let v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
         assert_eq!(v["statusLine"]["command"], "~/.claude/statusline");
         fs::remove_file(&p).ok();
     }
@@ -97,8 +95,7 @@ mod tests {
         let p = tmp_path(line!());
         fs::write(&p, r#"{"other":"value","nested":{"a":1}}"#).unwrap();
         run(p.to_str().unwrap(), "~/.claude/statusline").unwrap();
-        let v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
         assert_eq!(v["other"], "value");
         assert_eq!(v["nested"]["a"], 1);
         assert_eq!(v["statusLine"]["type"], "command");
@@ -108,10 +105,13 @@ mod tests {
     #[test]
     fn overwrites_existing_statusline_key() {
         let p = tmp_path(line!());
-        fs::write(&p, r#"{"statusLine":{"type":"old","command":"old","padding":99}}"#).unwrap();
+        fs::write(
+            &p,
+            r#"{"statusLine":{"type":"old","command":"old","padding":99}}"#,
+        )
+        .unwrap();
         run(p.to_str().unwrap(), "~/.claude/statusline").unwrap();
-        let v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
         assert_eq!(v["statusLine"]["command"], "~/.claude/statusline");
         assert_eq!(v["statusLine"]["padding"], 0);
         fs::remove_file(&p).ok();
@@ -173,8 +173,7 @@ mod tests {
         let p = tmp_path(line!());
         let _ = fs::remove_file(&p);
         run(p.to_str().unwrap(), "/custom/path/statusline").unwrap();
-        let v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
         assert_eq!(v["statusLine"]["command"], "/custom/path/statusline");
         fs::remove_file(&p).ok();
     }

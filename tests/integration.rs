@@ -61,8 +61,7 @@ fn contains_directory_icon() {
 
 #[test]
 fn configure_settings_creates_and_merges() {
-    let dir = std::env::temp_dir()
-        .join(format!("statusline-cfg-itest-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("statusline-cfg-itest-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let settings = dir.join("settings.json");
     std::fs::write(&settings, r#"{"other":"value"}"#).unwrap();
@@ -77,7 +76,12 @@ fn configure_settings_creates_and_merges() {
         .output()
         .expect("failed to run statusline");
 
-    assert_eq!(out.status.code(), Some(0), "non-zero exit: {:?}", out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "non-zero exit: {:?}",
+        out.stderr
+    );
 
     let content = std::fs::read_to_string(&settings).unwrap();
     let v: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -87,4 +91,22 @@ fn configure_settings_creates_and_merges() {
     assert_eq!(v["statusLine"]["padding"], 0);
 
     std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn shows_rate_limits_when_present() {
+    let json = r#"{"model":{"display_name":"M"},"rate_limits":{"five_hour":{"used_percentage":82,"resets_at":4102444800},"seven_day":{"used_percentage":41.2,"resets_at":4102444800}}}"#;
+    let out = run_statusline(json);
+    assert!(out.contains("⏳ 5h"), "missing rate limits in: {out}");
+    assert!(
+        out.contains("82%") && out.contains("41%"),
+        "missing percents in: {out}"
+    );
+    assert!(out.contains('↻'), "missing reset countdown in: {out}");
+}
+
+#[test]
+fn hides_rate_limits_when_absent() {
+    let out = run_statusline(include_str!("fixtures/test-input.json"));
+    assert!(!out.contains('⏳'), "unexpected rate limits in: {out}");
 }
