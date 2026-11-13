@@ -14,7 +14,7 @@ Rust binary statusline for Claude Code CLI displaying (in order):
 - Cost tracking (💰) when present and enabled
 
 **Primary file**: `src/main.rs`
-**Language**: Rust 1.96, edition 2024
+**Language**: Rust 1.100, edition 2024
 **Binary name**: `statusline`
 
 ## Development Commands
@@ -188,7 +188,7 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
 /
 ├── Cargo.toml              # Rust project manifest
 ├── Cargo.lock              # Locked dependencies
-├── rust-toolchain.toml     # Pinned Rust version (1.96.0)
+├── rust-toolchain.toml     # Pinned Rust version (1.100.0)
 ├── src/
 │   ├── main.rs             # Entry point
 │   ├── configure.rs        # --configure-settings: settings.json merge
