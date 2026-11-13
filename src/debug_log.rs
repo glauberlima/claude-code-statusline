@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[allow(dead_code)]
 pub fn append(raw: &str) {
     let Some(home) = std::env::var_os("HOME") else {
         return;
@@ -12,7 +11,6 @@ pub fn append(raw: &str) {
     append_to_path(&path, raw);
 }
 
-#[allow(dead_code)]
 fn append_to_path(path: &Path, raw: &str) {
     let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) else {
         return;

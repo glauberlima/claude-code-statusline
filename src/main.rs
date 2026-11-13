@@ -4,7 +4,6 @@ mod configure;
 mod git;
 mod input;
 mod render;
-#[cfg(debug_assertions)]
 mod debug_log;
 
 use anyhow::Context;
@@ -37,8 +36,9 @@ fn main() -> anyhow::Result<()> {
     }
 
     let raw = read_stdin()?;
-    #[cfg(debug_assertions)]
-    debug_log::append(&raw);
+    if cfg!(debug_assertions) || std::env::var_os("STATUSLINE_DEBUG").is_some() {
+        debug_log::append(&raw);
+    }
     let input = input::parse(&raw)?;
     let config = config::load();
     let git_info = git::get_git_info(&input.current_dir);

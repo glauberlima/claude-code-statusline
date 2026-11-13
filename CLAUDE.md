@@ -74,7 +74,7 @@ JSON stdin → input.rs (parse) → config.rs (load TOML) → git.rs (git status
 | `src/git.rs` | Single `git status --porcelain=v2 --branch --untracked-files=all` call; `parse_porcelain_v2()` |
 | `src/components.rs` | All component builders (`build_model`, `build_directory`, `build_git`, `build_files`, `build_context`, `build_rate_limits`, `build_cost`), each taking a `&Palette`; `build_all()` orchestrator |
 | `src/render.rs` | ANSI color constants, `Palette`/`build_palette()` (theme → semantic colors), `BAR_FILLED`/`BAR_EMPTY`/`BAR_WIDTH`, `assemble()` |
-| `src/debug_log.rs` | Debug-only (`#[cfg(debug_assertions)]`): appends raw stdin JSON to `~/.claude/statusline-debug.log` for troubleshooting |
+| `src/debug_log.rs` | Appends raw stdin JSON to `~/.claude/statusline-debug.log` for troubleshooting. Always on in debug builds; in release builds only when `STATUSLINE_DEBUG` is set (e.g. `"command": "STATUSLINE_DEBUG=1 ~/.claude/statusline"`) |
 | `tests/integration.rs` | End-to-end tests spawning the compiled binary with fixture JSON |
 
 ### Key Design Decisions
@@ -202,7 +202,7 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
 │   ├── git.rs              # Git status (porcelain v2)
 │   ├── components.rs       # All component builders
 │   ├── render.rs           # ANSI constants + assembly
-│   └── debug_log.rs        # Debug-only stdin JSON logger (#[cfg(debug_assertions)])
+│   └── debug_log.rs        # stdin JSON logger (debug builds, or release with STATUSLINE_DEBUG)
 ├── tests/
 │   ├── integration.rs      # End-to-end binary tests
 │   └── fixtures/
