@@ -1,157 +1,58 @@
 name: Release
 
+# push to main: release-please opens/updates the release PR; merging it creates a draft
+#   release + tag, then the binaries are built, scanned, attached and the release is published.
+# workflow_dispatch: unstable prerelease vX.Y.(Z+1)-dev.<sha> with GitHub-generated notes.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      type:
-        description: 'Release type'
-        required: true
-        type: choice
-        options: [stable, unstable]
 
 jobs:
   cut:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: write
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      skipped: ${{ steps.version.outputs.skipped }}
+      tag: ${{ steps.rp.outputs.tag_name || steps.dev.outputs.tag }}
+      release: ${{ steps.rp.outputs.release_created || steps.dev.outputs.release }}
 
     steps:
+      # App token (not GITHUB_TOKEN) so the release PR triggers PR Validation
       - uses: actions/create-github-app-token@v3
+        if: github.event_name == 'push'
         id: app-token
         with:
           client-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v6
+      - uses: googleapis/release-please-action@v5
+        if: github.event_name == 'push'
+        id: rp
         with:
-          fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/cache@v5
-        if: inputs.type == 'stable'
-        id: cliff-cache
-        with:
-          path: ~/.cargo/bin/git-cliff
-          key: git-cliff-2.13.1-${{ runner.os }}
+      - uses: actions/checkout@v6
+        if: github.event_name == 'workflow_dispatch'
 
-      - name: Install git-cliff
-        if: inputs.type == 'stable' && steps.cliff-cache.outputs.cache-hit != 'true'
-        run: cargo install git-cliff --version 2.13.1 --locked
-
-      - name: Compute version
-        id: version
+      - name: Compute unstable version
+        if: github.event_name == 'workflow_dispatch'
+        id: dev
         env:
-          SHA7: ${{ github.sha }}
+          SHA: ${{ github.sha }}
         run: |
-          if [ "${{ inputs.type }}" = "stable" ]; then
-            LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" --exclude "*-dev*" 2>/dev/null || echo "")
-          else
-            LAST_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*.[0-9]*.[0-9]*" --exclude "*-dev*" 2>/dev/null || echo "")
-          fi
-
-          LOG_RANGE="${LAST_TAG:+${LAST_TAG}..}HEAD"
-
-          BUMP=$(git log "$LOG_RANGE" --pretty=format:"%s%n%b" | awk '
-            BEGIN { bump = 0 }
-            /^(feat|fix|refactor)(\([^)]*\))?!:/ { if (bump < 3) bump = 3 }
-            /^BREAKING CHANGE:/                   { if (bump < 3) bump = 3 }
-            /^feat(\([^)]*\))?:/                  { if (bump < 2) bump = 2 }
-            /^(fix|perf|refactor|docs|chore|style)(\([^)]*\))?:/ { if (bump < 1) bump = 1 }
-            END {
-              if (bump == 0) print "skip"
-              else if (bump == 1) print "patch"
-              else if (bump == 2) print "minor"
-              else print "major"
-            }
-          ')
-
-          echo "Detected bump: $BUMP"
-
-          if [ "${{ inputs.type }}" = "stable" ] && [ "$BUMP" = "skip" ]; then
-            echo "tag=skip" >> "$GITHUB_OUTPUT"
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Unstable: treat "skip" as "patch"
-          [ "$BUMP" = "skip" ] && BUMP="patch"
-
-          BASE="${LAST_TAG:-v0.0.0}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${BASE#v}"
-          # Strip any -dev.* suffix from PATCH before arithmetic
-          PATCH="${PATCH%%-*}"
-          case "$BUMP" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          if [ "${{ inputs.type }}" = "stable" ]; then
-            VERSION="${MAJOR}.${MINOR}.${PATCH}"
-            TAG="v${VERSION}"
-          else
-            SHA="${SHA7::7}"
-            VERSION="${MAJOR}.${MINOR}.${PATCH}-dev.${SHA}"
-            TAG="v${VERSION}"
-          fi
-
+          # Next patch of the current release so the prerelease sorts above it
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))-dev.${SHA::7}"
           echo "Version: $TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "skipped=false" >> "$GITHUB_OUTPUT"
-
-      - name: No release needed
-        if: steps.version.outputs.skipped == 'true'
-        run: echo "No releasable commits since last tag. Skipping."
-
-      - name: Update CHANGELOG.md
-        if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
-          RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
-          touch CHANGELOG.md
-          git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --prepend CHANGELOG.md
-
-      - name: Bump Cargo.toml version
-        if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          VERSION="${TAG#v}"
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
-
-      - name: Commit, tag, and push (stable)
-        if: inputs.type == 'stable' && steps.version.outputs.skipped != 'true'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md Cargo.toml Cargo.lock
-          git commit -m "chore(release): $TAG"
-          git tag -a "$TAG" -m "$TAG"
-          git push origin main --follow-tags
-
-      - name: Tag and push (unstable)
-        if: inputs.type == 'unstable'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "unstable $TAG"
-          git push origin "$TAG"
+          echo "release=true" >> "$GITHUB_OUTPUT"
 
   build-macos:
     name: Build macOS universal
     needs: [cut]
-    if: needs.cut.outputs.skipped != 'true'
+    if: needs.cut.outputs.release == 'true'
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -162,7 +63,7 @@ jobs:
           toolchain: '1.100.0'
           targets: x86_64-apple-darwin,aarch64-apple-darwin
       - name: Patch Cargo.toml version (unstable)
-        if: inputs.type == 'unstable'
+        if: github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
@@ -189,7 +90,7 @@ jobs:
   build-linux:
     name: Build Linux x64
     needs: [cut]
-    if: needs.cut.outputs.skipped != 'true'
+    if: needs.cut.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -199,7 +100,7 @@ jobs:
         with:
           toolchain: '1.100.0'
       - name: Patch Cargo.toml version (unstable)
-        if: inputs.type == 'unstable'
+        if: github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
@@ -220,7 +121,7 @@ jobs:
   build-windows:
     name: Build Windows x64
     needs: [cut]
-    if: needs.cut.outputs.skipped != 'true'
+    if: needs.cut.outputs.release == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -230,7 +131,7 @@ jobs:
         with:
           toolchain: '1.100.0'
       - name: Patch Cargo.toml version (unstable)
-        if: inputs.type == 'unstable'
+        if: github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
@@ -250,17 +151,15 @@ jobs:
           path: statusline-windows-x64.exe
 
   publish:
-    name: ${{ inputs.type == 'stable' && 'Create GitHub Release' || 'Create GitHub Prerelease' }}
+    name: ${{ github.event_name == 'push' && 'Publish GitHub Release' || 'Create GitHub Prerelease' }}
     needs: [cut, build-macos, build-linux, build-windows]
-    if: needs.cut.outputs.skipped != 'true'
+    if: needs.cut.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - uses: actions/download-artifact@v8
 
@@ -282,90 +181,45 @@ jobs:
             statusline-windows-x64/statusline-windows-x64.exe \
             > /tmp/vt-results.txt
 
-      - name: Build VirusTotal security section
-        id: vt-section
+      - name: Build release notes header
+        env:
+          TAG: ${{ needs.cut.outputs.tag }}
         run: |
-          RESULTS=$(cat /tmp/vt-results.txt)
-          TABLE="## 🛡️ Security scan\n\nAll binaries scanned by VirusTotal before this release was published.\n\n| Binary | Result | Report |\n|--------|--------|--------|\n"
-          while IFS='|' read -r name malicious total sha256 gui_url; do
-            [ -z "$name" ] && continue
-            if [ "$malicious" = "0" ]; then
-              COLOR="brightgreen"
-              LABEL="clean"
-            else
-              COLOR="red"
-              LABEL="flagged"
+          {
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              printf '> ⚠️ **Unstable release** — pre-release build for testing only.\n\n'
             fi
-            BADGE_TEXT="${malicious}%2F${total}_${LABEL}"
-            BADGE_URL="https://img.shields.io/badge/VirusTotal-${BADGE_TEXT}-${COLOR}"
-            TABLE="${TABLE}| ${name} | ![${malicious}/${total} engines](${BADGE_URL}) | [View report](${gui_url}) |\n"
-          done <<< "$RESULTS"
-          TABLE="${TABLE}\n---"
-          echo "section<<VT_SEC_EOF" >> "$GITHUB_OUTPUT"
-          printf "%b" "$TABLE"       >> "$GITHUB_OUTPUT"
-          echo ""                    >> "$GITHUB_OUTPUT"
-          echo "VT_SEC_EOF"          >> "$GITHUB_OUTPUT"
+            printf '## 🛡️ Security scan\n\nAll binaries scanned by VirusTotal before this release was published.\n\n| Binary | Result | Report |\n|--------|--------|--------|\n'
+            while IFS='|' read -r name malicious total _ gui_url; do
+              [ -z "$name" ] && continue
+              if [ "$malicious" = "0" ]; then COLOR="brightgreen"; LABEL="clean"; else COLOR="red"; LABEL="flagged"; fi
+              printf '| %s | ![%s/%s engines](https://img.shields.io/badge/VirusTotal-%s%%2F%s_%s-%s) | [View report](%s) |\n' \
+                "$name" "$malicious" "$total" "$malicious" "$total" "$LABEL" "$COLOR" "$gui_url"
+            done < /tmp/vt-results.txt
+            printf '\n---\n\n## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---\n\n' \
+              "curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}" \
+              "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
+          } > header.md
+          cat header.md
 
-      - name: Extract release notes from CHANGELOG (stable)
-        if: inputs.type == 'stable'
-        id: notes-stable
+      - name: Publish release (stable)
+        if: github.event_name == 'push'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}
         run: |
-          CHANGELOG_BODY=$(awk '/^## /{if(found)exit; found=1; next} found{print}' CHANGELOG.md)
-          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
-          PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
-          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
-          VT_SECTION="${{ steps.vt-section.outputs.section }}"
-          BODY="${VT_SECTION}"$'\n\n'"${INSTALL_BLOCK}"$'\n\n'"${CHANGELOG_BODY}"
-          echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
-          echo "$BODY" >> "$GITHUB_OUTPUT"
-          echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v5
-        if: inputs.type == 'unstable'
-        id: cliff-cache
-        with:
-          path: ~/.cargo/bin/git-cliff
-          key: git-cliff-2.13.1-${{ runner.os }}
-
-      - name: Install git-cliff (unstable)
-        if: inputs.type == 'unstable' && steps.cliff-cache.outputs.cache-hit != 'true'
-        run: cargo install git-cliff --version 2.13.1 --locked
-
-      - name: Generate changelog (unstable)
-        if: inputs.type == 'unstable'
-        id: notes-unstable
-        env:
-          TAG: ${{ needs.cut.outputs.tag }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          LAST_STABLE=$(git describe --tags --abbrev=0 --exclude "*-dev.*" 2>/dev/null || echo "")
-          RANGE="${LAST_STABLE:+${LAST_STABLE}..}HEAD"
-          CLIFF_BODY=$(NO_COLOR=1 git cliff --tag "$TAG" "$RANGE" --ignore-tags ".*-dev\..*" --strip all 2>/dev/null || true)
-          CURL_CMD="curl -fsSL https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.sh | bash -s -- --version ${TAG}"
-          PS_CMD="& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/glauberlima/claude-code-statusline/main/install.ps1'))) -Version ${TAG}"
-          INSTALL_BLOCK=$(printf '## Install this version\n\n**macOS / Linux / WSL**\n```bash\n%s\n```\n\n**Windows — PowerShell**\n```powershell\n%s\n```\n\n---' "$CURL_CMD" "$PS_CMD")
-          VT_SECTION="${{ steps.vt-section.outputs.section }}"
-          BODY="${VT_SECTION}"$'\n\n'"${INSTALL_BLOCK}"$'\n\n'"${CLIFF_BODY}"
-          echo "body<<CLIFF_EOF" >> "$GITHUB_OUTPUT"
-          echo "$BODY" >> "$GITHUB_OUTPUT"
-          echo "CLIFF_EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Create release (stable)
-        if: inputs.type == 'stable'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.cut.outputs.tag }}
-          body: ${{ steps.notes-stable.outputs.body }}
-          files: |
-            statusline-macos/statusline-macos
-            statusline-linux-x64/statusline-linux-x64
-            statusline-windows-x64/statusline-windows-x64.exe
+          # release-please created a draft with the changelog as body; prepend header, attach, publish
+          gh release view "$TAG" --json body -q .body > changelog.md
+          cat header.md changelog.md > notes.md
+          gh release upload "$TAG" --clobber \
+            statusline-macos/statusline-macos \
+            statusline-linux-x64/statusline-linux-x64 \
+            statusline-windows-x64/statusline-windows-x64.exe \
             checksums.txt
+          gh release edit "$TAG" --notes-file notes.md --draft=false --latest
 
       - name: Update README security section (stable)
-        if: inputs.type == 'stable'
+        if: github.event_name == 'push'
         run: |
           SECURITY_SECTION="## 🛡️ Security\n\nAll release binaries are automatically scanned by [VirusTotal](https://virustotal.com) before publishing.\nEach release page includes the scan results and direct links to the VirusTotal reports for every binary."
 
@@ -404,15 +258,14 @@ jobs:
           fi
 
       - name: Create prerelease (unstable)
-        if: inputs.type == 'unstable'
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.cut.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           prerelease: true
-          body: |
-            > ⚠️ **Unstable release** — pre-release build for testing only.
-
-            ${{ steps.notes-unstable.outputs.body }}
+          generate_release_notes: true
+          body_path: header.md
           files: |
             statusline-macos/statusline-macos
             statusline-linux-x64/statusline-linux-x64
