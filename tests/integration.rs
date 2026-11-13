@@ -88,3 +88,24 @@ fn configure_settings_creates_and_merges() {
 
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn shows_rate_limits_when_present() {
+    let json = r#"{"model":{"display_name":"M"},"rate_limits":{"five_hour":{"used_percentage":82,"resets_at":4102444800},"seven_day":{"used_percentage":41.2,"resets_at":4102444800}}}"#;
+    let out = run_statusline(json);
+    assert!(out.contains("⏳ 5h"), "missing rate limits in: {out}");
+    assert!(
+        out.contains("82%") && out.contains("41%"),
+        "missing percents in: {out}"
+    );
+    assert!(
+        out.contains('↻'),
+        "missing reset countdown above 75% in: {out}"
+    );
+}
+
+#[test]
+fn hides_rate_limits_when_absent() {
+    let out = run_statusline(include_str!("fixtures/test-input.json"));
+    assert!(!out.contains('⏳'), "unexpected rate limits in: {out}");
+}

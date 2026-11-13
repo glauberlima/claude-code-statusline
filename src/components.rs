@@ -1,6 +1,6 @@
 use crate::config::{BarStyle, Config, ContextTier, Theme, get_messages};
 use crate::git::{GitInfo, GitState};
-use crate::input::ClaudeInput;
+use crate::input::{ClaudeInput, RateWindow};
 use crate::render::{
     BAR_EMPTY, BAR_FILLED, BAR_WIDTH, GRADIENT_COLORS, GRAY, GREEN, NC, ORANGE, ORANGE_256, RED,
     Palette, WAVE_COLORS, build_palette,
@@ -20,6 +20,7 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
         0
     };
     let message_time = if config.messages { now_secs() } else { 0 };
+    let now = now_secs();
     let palette = build_palette(config.theme);
 
     vec![
@@ -28,6 +29,7 @@ pub fn build_all(input: &ClaudeInput, git: &GitInfo, config: &Config) -> Vec<Str
         build_files(git.changed_files, &palette),
         build_model(input, &palette),
         build_context(input, config, &palette, wave_time, message_time),
+        build_rate_limits(input, &palette, now),
         build_cost(input.cost_usd, config, &palette),
     ]
 }
@@ -108,6 +110,50 @@ pub fn build_context(
     };
 
     format!("{emoji} {GRAY}[{NC}{bar_and_pct} {usage}/{size}{message_part}")
+}
+
+/// Reset countdown is shown only above this usage, where it becomes actionable.
+const RATE_RESET_THRESHOLD: u8 = 75;
+
+pub fn build_rate_limits(input: &ClaudeInput, palette: &Palette, now: u64) -> String {
+    let part = |label: &str, w: Option<RateWindow>| {
+        // A window past its resets_at holds a stale pre-reset value until the next API response.
+        w.filter(|w| w.resets_at.is_none_or(|at| at > now)).map(|w| {
+            let color = match ContextTier::from_percent(w.pct) {
+                ContextTier::VeryLow => &palette.green,
+                ContextTier::Low => &palette.cyan,
+                ContextTier::Medium | ContextTier::High => &palette.orange,
+                ContextTier::Critical => &palette.red,
+            };
+            let reset = match w.resets_at {
+                Some(at) if w.pct > RATE_RESET_THRESHOLD => {
+                    format!(" {GRAY}↻{}{NC}", format_duration(at - now))
+                }
+                _ => String::new(),
+            };
+            format!("{label} {color}{}%{NC}{reset}", w.pct)
+        })
+    };
+    let parts: Vec<String> = [part("5h", input.rate_5h), part("7d", input.rate_7d)]
+        .into_iter()
+        .flatten()
+        .collect();
+    if parts.is_empty() {
+        return String::new();
+    }
+    format!("⏳ {}", parts.join(&format!(" {GRAY}·{NC} ")))
+}
+
+/// Compact duration: `45m`, `1h12m`, `2d3h`.
+fn format_duration(secs: u64) -> String {
+    let (d, h, m) = (secs / 86_400, secs % 86_400 / 3600, secs % 3600 / 60);
+    if d > 0 {
+        format!("{d}d{h}h")
+    } else if h > 0 {
+        format!("{h}h{m:02}m")
+    } else {
+        format!("{m}m")
+    }
 }
 
 pub fn build_cost(cost_usd: f64, config: &Config, palette: &Palette) -> String {
@@ -270,6 +316,8 @@ mod tests {
             current_usage: Some(28_000),
             context_percent: Some(14),
             cost_usd: 1.23,
+            rate_5h: None,
+            rate_7d: None,
         }
     }
 
@@ -287,6 +335,77 @@ mod tests {
         let out = build_directory(&input, &default_palette());
         assert!(out.contains("test"), "should show last segment: {out}");
         assert!(out.contains("📁"), "should show dir icon: {out}");
+    }
+
+    fn rw(pct: u8, resets_at: Option<u64>) -> Option<RateWindow> {
+        Some(RateWindow { pct, resets_at })
+    }
+
+    #[test]
+    fn rate_limits_hidden_when_absent() {
+        assert_eq!(
+            build_rate_limits(&default_input(), &default_palette(), 0),
+            ""
+        );
+    }
+
+    #[test]
+    fn rate_limits_shows_both_windows_without_reset_below_threshold() {
+        let input = ClaudeInput {
+            rate_5h: rw(23, Some(5000)),
+            rate_7d: rw(75, Some(5000)),
+            ..default_input()
+        };
+        let out = build_rate_limits(&input, &default_palette(), 1000);
+        assert!(out.starts_with("⏳ 5h "), "{out}");
+        assert!(
+            out.contains("23%") && out.contains("7d ") && out.contains("75%"),
+            "{out}"
+        );
+        assert!(!out.contains('↻'), "no reset at <=75%: {out}");
+    }
+
+    #[test]
+    fn rate_limits_shows_reset_above_threshold() {
+        let now = 1_000_000;
+        let input = ClaudeInput {
+            rate_5h: rw(82, Some(now + 3600 + 12 * 60)),
+            rate_7d: rw(90, Some(now + 2 * 86_400 + 3 * 3600)),
+            ..default_input()
+        };
+        let out = build_rate_limits(&input, &default_palette(), now);
+        assert!(out.contains("↻1h12m") && out.contains("↻2d3h"), "{out}");
+    }
+
+    #[test]
+    fn rate_limits_single_window() {
+        let input = ClaudeInput {
+            rate_7d: rw(90, Some(5000)),
+            ..default_input()
+        };
+        let out = build_rate_limits(&input, &default_palette(), 1000);
+        assert!(out.contains("7d ") && out.contains("90%") && !out.contains("5h"), "{out}");
+    }
+
+    #[test]
+    fn rate_limits_hides_window_past_reset() {
+        let input = ClaudeInput {
+            rate_5h: rw(92, Some(500)),
+            rate_7d: rw(41, None),
+            ..default_input()
+        };
+        let out = build_rate_limits(&input, &default_palette(), 1000);
+        assert!(!out.contains("5h") && !out.contains("92%"), "stale window must hide: {out}");
+        assert!(out.contains("7d ") && out.contains("41%"), "{out}");
+        let all_stale = ClaudeInput { rate_5h: rw(92, Some(500)), ..default_input() };
+        assert_eq!(build_rate_limits(&all_stale, &default_palette(), 1000), "");
+    }
+
+    #[test]
+    fn format_duration_units() {
+        assert_eq!(format_duration(45 * 60), "45m");
+        assert_eq!(format_duration(3600 + 5 * 60), "1h05m");
+        assert_eq!(format_duration(86_400 + 3600), "1d1h");
     }
 
     #[test]

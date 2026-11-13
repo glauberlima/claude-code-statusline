@@ -8,6 +8,15 @@ pub struct ClaudeInput {
     pub current_usage: Option<u32>,
     pub context_percent: Option<u8>,
     pub cost_usd: f64,
+    pub rate_5h: Option<RateWindow>,
+    pub rate_7d: Option<RateWindow>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RateWindow {
+    pub pct: u8,
+    /// Unix epoch seconds when the window resets.
+    pub resets_at: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -16,6 +25,7 @@ struct RawInput {
     workspace: Option<RawWorkspace>,
     context_window: Option<RawContextWindow>,
     cost: Option<RawCost>,
+    rate_limits: Option<RawRateLimits>,
 }
 
 #[derive(Deserialize)]
@@ -42,6 +52,19 @@ struct RawUsage {
     output_tokens: Option<u32>,
     cache_creation_input_tokens: Option<u32>,
     cache_read_input_tokens: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct RawRateLimits {
+    five_hour: Option<RawRateWindow>,
+    seven_day: Option<RawRateWindow>,
+}
+
+#[derive(Deserialize)]
+struct RawRateWindow {
+    used_percentage: Option<f64>,
+    // f64, not u64: an unexpected float/negative value must not fail the whole parse.
+    resets_at: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -102,6 +125,18 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         .and_then(|c| c.total_cost_usd)
         .unwrap_or(0.0);
 
+    let rl = raw.rate_limits.as_ref();
+    let rate_pct = |w: Option<&RawRateWindow>| {
+        w.and_then(|w| {
+            w.used_percentage.map(|p| RateWindow {
+                pct: p.round().clamp(0.0, 100.0) as u8,
+                resets_at: w.resets_at.filter(|t| *t > 0.0).map(|t| t as u64),
+            })
+        })
+    };
+    let rate_5h = rate_pct(rl.and_then(|r| r.five_hour.as_ref()));
+    let rate_7d = rate_pct(rl.and_then(|r| r.seven_day.as_ref()));
+
     Ok(ClaudeInput {
         model_name,
         current_dir,
@@ -109,6 +144,8 @@ pub fn parse(json: &str) -> Result<ClaudeInput> {
         current_usage,
         context_percent,
         cost_usd,
+        rate_5h,
+        rate_7d,
     })
 }
 
@@ -189,6 +226,50 @@ mod tests {
         let json = r#"{"context_window": {"context_window_size": 200000, "current_usage": {"input_tokens": 185000, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}}"#;
         let r = parse(json).unwrap();
         assert_eq!(r.context_percent, Some(100));
+    }
+
+    #[test]
+    fn parses_rate_limits_rounded() {
+        let json = r#"{"rate_limits": {"five_hour": {"used_percentage": 23.5, "resets_at": 1738425600}, "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600}}}"#;
+        let r = parse(json).unwrap();
+        assert_eq!(
+            r.rate_5h,
+            Some(RateWindow {
+                pct: 24,
+                resets_at: Some(1738425600)
+            })
+        );
+        assert_eq!(
+            r.rate_7d,
+            Some(RateWindow {
+                pct: 41,
+                resets_at: Some(1738857600)
+            })
+        );
+    }
+
+    #[test]
+    fn rate_limits_tolerates_float_and_negative_resets_at() {
+        let r = parse(r#"{"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": 1738425600.0}, "seven_day": {"used_percentage": 10, "resets_at": -5}}}"#).unwrap();
+        assert_eq!(r.rate_5h.unwrap().resets_at, Some(1738425600));
+        assert_eq!(r.rate_7d.unwrap().resets_at, None);
+    }
+
+    #[test]
+    fn rate_limits_absent_or_partial() {
+        let r = parse(MINIMAL).unwrap();
+        assert_eq!((r.rate_5h, r.rate_7d), (None, None));
+        let r = parse(r#"{"rate_limits": {"five_hour": {"used_percentage": 150}}}"#).unwrap();
+        assert_eq!(
+            (r.rate_5h, r.rate_7d),
+            (
+                Some(RateWindow {
+                    pct: 100,
+                    resets_at: None
+                }),
+                None
+            )
+        );
     }
 
     #[test]
